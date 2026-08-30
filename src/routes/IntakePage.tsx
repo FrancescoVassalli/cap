@@ -1,10 +1,12 @@
-import { Form, Formik, type FormikHelpers } from 'formik'
-import { useMemo, useState, type ChangeEvent } from 'react'
+import { Form, Formik } from 'formik'
+import { useState, type ChangeEvent } from 'react'
+import { Link } from 'react-router-dom'
 import { Button } from '@/components/forms/Button'
 import { FormField } from '@/components/forms/FormField'
 import { RadioGroup } from '@/components/forms/RadioGroup'
 import { TextInput } from '@/components/forms/TextInput'
 import { ZipInput } from '@/components/forms/ZipInput'
+import { getContent, type AllContent } from '@/content'
 import { MockSubmissionService } from '@/services/submissionService'
 import { MockZipService } from '@/services/zipService'
 import type { IntakeDocument, IntakeFormValues } from '@/types/index'
@@ -12,8 +14,6 @@ import { intakeSchema } from '@/validation/intakeSchema'
 
 const zipService = new MockZipService()
 const submissionService = new MockSubmissionService()
-
-const stepTitles = ['Location', 'Language', 'Contact information', 'Documents'] as const
 
 const initialValues: IntakeFormValues = {
   zipCode: '',
@@ -29,40 +29,41 @@ const initialValues: IntakeFormValues = {
   documents: [],
 }
 
-function validateStep(step: number, values: IntakeFormValues) {
+function validateStep(step: number, values: IntakeFormValues, content: AllContent) {
   const errors: Partial<Record<keyof IntakeFormValues, string>> = {}
+  const errorMessages = content.intakeForm.errors
 
   if (step === 0) {
     const cleanZip = values.zipCode.trim()
     if (cleanZip && !/^\d{5}$/.test(cleanZip)) {
-      errors.zipCode = 'ZIP code must be 5 digits'
+      errors.zipCode = errorMessages.zipMustBeFiveDigits
     }
   }
 
   if (step === 1 && !values.language) {
-    errors.language = 'Please select a language'
+    errors.language = errorMessages.selectLanguage
   }
 
   if (step === 2) {
     if (!values.firstName.trim()) {
-      errors.firstName = 'First name is required'
+      errors.firstName = errorMessages.required
     }
     if (!values.lastName.trim()) {
-      errors.lastName = 'Last name is required'
+      errors.lastName = errorMessages.required
     }
     if (!values.email.trim()) {
-      errors.email = 'Email is required'
+      errors.email = errorMessages.required
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values.email)) {
-      errors.email = 'Enter a valid email address'
+      errors.email = errorMessages.invalidEmail
     }
     if (!values.streetAddress.trim()) {
-      errors.streetAddress = 'Street address is required'
+      errors.streetAddress = errorMessages.required
     }
     if (!values.city.trim()) {
-      errors.city = 'City is required'
+      errors.city = errorMessages.required
     }
     if (!values.state.trim()) {
-      errors.state = 'State is required'
+      errors.state = errorMessages.required
     }
   }
 
@@ -78,20 +79,13 @@ function formatFileSize(bytes: number) {
 export function IntakePage() {
   const [currentStep, setCurrentStep] = useState(0)
   const [submissionStatus, setSubmissionStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
+  const [submissionError, setSubmissionError] = useState<'error' | 'networkError'>('error')
   const [referenceId, setReferenceId] = useState('')
   const [zipNotice, setZipNotice] = useState('')
+  const [submittedLanguage, setSubmittedLanguage] = useState<'en' | 'es'>('en')
 
-  const totalSteps = stepTitles.length
-
-  const stepMeta = useMemo(
-    () => ({
-      label: stepTitles[currentStep],
-      stepNumber: currentStep + 1,
-    }),
-    [currentStep]
-  )
-
-  const handleSubmit = async (values: IntakeFormValues, helpers: FormikHelpers<IntakeFormValues>) => {
+  const handleSubmit = async (values: IntakeFormValues) => {
+    setSubmittedLanguage(values.language)
     setSubmissionStatus('loading')
     try {
       const result = await submissionService.submit({
@@ -108,35 +102,36 @@ export function IntakePage() {
       })
 
       if (!result.success) {
+        setSubmissionError('error')
         setSubmissionStatus('error')
-        helpers.setFieldError('email', result.message || 'We could not submit your request.')
         return
       }
 
       setReferenceId(result.referenceId || 'CAP-0000')
       setSubmissionStatus('success')
     } catch {
+      setSubmissionError('networkError')
       setSubmissionStatus('error')
-      helpers.setFieldError('email', 'We could not connect to the service.')
     }
   }
 
   if (submissionStatus === 'success') {
+    const content = getContent(submittedLanguage)
+    const { success } = content.submission
+
     return (
       <main className="mx-auto max-w-2xl px-4 py-10 sm:px-6">
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-          <h1 className="mb-4 text-3xl font-bold text-cap-primary">Request received</h1>
-          <p className="mb-4 text-base text-slate-700">
-            Thank you for contacting the Consumer Assistance Program. A member of our team will review your request and contact you by phone or email.
-          </p>
-          <p className="mb-6 text-slate-700">
-            CAP generally responds within five business days, although it may take longer when we receive a high volume of requests.
-          </p>
+          <h1 className="mb-4 text-3xl font-bold text-cap-primary">{success.heading}</h1>
+          <p className="mb-4 text-base text-slate-700">{success.message}</p>
+          <p className="mb-6 text-slate-700">{success.nextSteps}</p>
 
           <div className="rounded-xl bg-slate-50 p-4">
-            <p className="text-sm font-medium uppercase tracking-wide text-slate-600">Your reference number is</p>
+            <p className="text-sm font-medium uppercase tracking-wide text-slate-600">{success.referenceNumberLabel}</p>
             <p className="mt-2 text-2xl font-bold text-cap-primary">{referenceId}</p>
           </div>
+
+          <p className="mt-6 text-sm text-slate-600">{success.contactInfoReminder}</p>
         </div>
       </main>
     )
@@ -149,8 +144,47 @@ export function IntakePage() {
       onSubmit={handleSubmit}
     >
       {({ values, errors, touched, handleChange, handleBlur, setFieldValue, setFieldError, validateForm, setTouched }) => {
+        const content = getContent(values.language)
+
+        if (submissionStatus === 'error') {
+          const errorContent = submissionError === 'networkError' ? content.submission.networkError : content.submission.error
+
+          return (
+            <main className="mx-auto max-w-2xl px-4 py-10 sm:px-6">
+              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+                <h1 className="mb-4 text-3xl font-bold text-status-error">{errorContent.heading}</h1>
+                <p className="mb-6 text-base text-slate-700">{errorContent.message}</p>
+                <div className="flex flex-col-reverse gap-3 sm:flex-row">
+                  <Button type="button" onClick={() => setSubmissionStatus('idle')}>
+                    {errorContent.retryLabel}
+                  </Button>
+                  {submissionError === 'error' && (
+                    <Link to="/intake">
+                      <Button type="button" variant="outline">
+                        {content.submission.error.contactLabel}
+                      </Button>
+                    </Link>
+                  )}
+                </div>
+              </div>
+            </main>
+          )
+        }
+
+        const stepTitles = [
+          content.intakeForm.stepLabels.zip,
+          content.intakeForm.stepLabels.language,
+          content.intakeForm.stepLabels.contact,
+          content.intakeForm.stepLabels.documents,
+        ]
+        const totalSteps = stepTitles.length
+        const stepMeta = {
+          label: stepTitles[currentStep],
+          stepNumber: currentStep + 1,
+        }
+
         const handleNext = async () => {
-          const stepErrors = validateStep(currentStep, values)
+          const stepErrors = validateStep(currentStep, values, content)
           const fieldNames = Object.keys(stepErrors) as Array<keyof IntakeFormValues>
 
           if (fieldNames.length > 0) {
@@ -186,7 +220,7 @@ export function IntakePage() {
             return
           }
 
-          await handleSubmit(values, { setFieldError, setTouched } as FormikHelpers<IntakeFormValues>)
+          await handleSubmit(values)
         }
 
         const handleZipChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -209,7 +243,7 @@ export function IntakePage() {
           }
 
           if (nextZip.length === 5) {
-            setZipNotice("We couldn't find that ZIP code. You can continue and enter your address manually.")
+            setZipNotice(content.intakeForm.zip.notFoundMessage)
           } else {
             setZipNotice('')
           }
@@ -230,24 +264,27 @@ export function IntakePage() {
         return (
           <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
             <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-              <p className="text-sm font-medium uppercase tracking-wide text-slate-600">Step {stepMeta.stepNumber} of {totalSteps}</p>
+              <p className="text-sm font-medium uppercase tracking-wide text-slate-600">
+                {content.intakeForm.navigation.progressLabel(stepMeta.stepNumber, totalSteps)}
+              </p>
               <h1 className="mt-1 text-2xl font-bold text-cap-primary">{stepMeta.label}</h1>
             </div>
 
             <Form className="space-y-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-8">
               {currentStep === 0 && (
                 <div className="space-y-4">
-                  <h2 className="text-2xl font-bold text-slate-900">What ZIP code do you live in?</h2>
+                  <h2 className="text-2xl font-bold text-slate-900">{content.intakeForm.zip.label}</h2>
 
                   <FormField
-                    label="ZIP code"
+                    label={content.intakeForm.contact.fields.zipCode.label}
                     htmlFor="zipCode"
                     error={touched.zipCode && errors.zipCode ? errors.zipCode : undefined}
-                    hint="We’ll use this to help fill in your city and state."
+                    hint={content.intakeForm.zip.hint}
                   >
                     <ZipInput
                       id="zipCode"
                       name="zipCode"
+                      placeholder={content.intakeForm.zip.placeholder}
                       value={values.zipCode}
                       onChange={handleZipChange}
                       onBlur={handleBlur}
@@ -272,25 +309,24 @@ export function IntakePage() {
                       setZipNotice('')
                     }}
                   >
-                    Skip this step
+                    {content.intakeForm.zip.skipLabel}
                   </button>
                 </div>
               )}
 
               {currentStep === 1 && (
                 <div className="space-y-4">
-                  <h2 className="text-2xl font-bold text-slate-900">Preferred language</h2>
+                  <h2 className="text-2xl font-bold text-slate-900">{content.intakeForm.language.label}</h2>
                   <FormField
                     error={touched.language && errors.language ? errors.language : undefined}
                   >
                     <RadioGroup
                       name="language"
-                      value={values.language}
                       onChange={handleChange}
                       onBlur={handleBlur}
                       options={[
-                        { value: 'en', label: 'English' },
-                        { value: 'es', label: 'Español' },
+                        { value: 'en', label: content.intakeForm.language.options.en },
+                        { value: 'es', label: content.intakeForm.language.options.es },
                       ]}
                       isInvalid={Boolean(touched.language && errors.language)}
                     />
@@ -300,10 +336,10 @@ export function IntakePage() {
 
               {currentStep === 2 && (
                 <div className="space-y-5">
-                  <h2 className="text-2xl font-bold text-slate-900">Contact information</h2>
+                  <h2 className="text-2xl font-bold text-slate-900">{content.intakeForm.contact.heading}</h2>
 
                   <div className="grid gap-4 sm:grid-cols-2">
-                    <FormField label="First name" htmlFor="firstName" required error={touched.firstName && errors.firstName ? errors.firstName : undefined}>
+                    <FormField label={content.intakeForm.contact.fields.firstName.label} htmlFor="firstName" required error={touched.firstName && errors.firstName ? errors.firstName : undefined}>
                       <TextInput
                         id="firstName"
                         name="firstName"
@@ -316,7 +352,7 @@ export function IntakePage() {
                       />
                     </FormField>
 
-                    <FormField label="Last name" htmlFor="lastName" required error={touched.lastName && errors.lastName ? errors.lastName : undefined}>
+                    <FormField label={content.intakeForm.contact.fields.lastName.label} htmlFor="lastName" required error={touched.lastName && errors.lastName ? errors.lastName : undefined}>
                       <TextInput
                         id="lastName"
                         name="lastName"
@@ -331,7 +367,7 @@ export function IntakePage() {
                   </div>
 
                   <div className="grid gap-4 sm:grid-cols-2">
-                    <FormField label="Email address" htmlFor="email" required error={touched.email && errors.email ? errors.email : undefined}>
+                    <FormField label={content.intakeForm.contact.fields.email.label} htmlFor="email" required error={touched.email && errors.email ? errors.email : undefined}>
                       <TextInput
                         id="email"
                         name="email"
@@ -345,7 +381,7 @@ export function IntakePage() {
                       />
                     </FormField>
 
-                    <FormField label="Phone" htmlFor="phone" error={touched.phone && errors.phone ? errors.phone : undefined}>
+                    <FormField label={content.intakeForm.contact.fields.phone.label} htmlFor="phone" error={touched.phone && errors.phone ? errors.phone : undefined}>
                       <TextInput
                         id="phone"
                         name="phone"
@@ -358,7 +394,7 @@ export function IntakePage() {
                     </FormField>
                   </div>
 
-                  <FormField label="Street address" htmlFor="streetAddress" required error={touched.streetAddress && errors.streetAddress ? errors.streetAddress : undefined}>
+                  <FormField label={content.intakeForm.contact.fields.address1.label} htmlFor="streetAddress" required error={touched.streetAddress && errors.streetAddress ? errors.streetAddress : undefined}>
                     <TextInput
                       id="streetAddress"
                       name="streetAddress"
@@ -371,7 +407,7 @@ export function IntakePage() {
                     />
                   </FormField>
 
-                  <FormField label="Apartment/unit" htmlFor="apartment" error={touched.apartment && errors.apartment ? errors.apartment : undefined}>
+                  <FormField label={content.intakeForm.contact.fields.address2.label} htmlFor="apartment" error={touched.apartment && errors.apartment ? errors.apartment : undefined}>
                     <TextInput
                       id="apartment"
                       name="apartment"
@@ -383,7 +419,7 @@ export function IntakePage() {
                   </FormField>
 
                   <div className="grid gap-4 sm:grid-cols-2">
-                    <FormField label="City" htmlFor="city" required error={touched.city && errors.city ? errors.city : undefined}>
+                    <FormField label={content.intakeForm.contact.fields.city.label} htmlFor="city" required error={touched.city && errors.city ? errors.city : undefined}>
                       <TextInput
                         id="city"
                         name="city"
@@ -396,7 +432,7 @@ export function IntakePage() {
                       />
                     </FormField>
 
-                    <FormField label="State" htmlFor="state" required error={touched.state && errors.state ? errors.state : undefined}>
+                    <FormField label={content.intakeForm.contact.fields.state.label} htmlFor="state" required error={touched.state && errors.state ? errors.state : undefined}>
                       <TextInput
                         id="state"
                         name="state"
@@ -414,14 +450,21 @@ export function IntakePage() {
 
               {currentStep === 3 && (
                 <div className="space-y-5">
-                  <h2 className="text-2xl font-bold text-slate-900">Documents</h2>
-                  <p className="text-base text-slate-700">
-                    You can upload documents that may help our team understand your situation. Examples include medical bills, explanation of benefits, insurance letters, claim denial letters, and other relevant documents.
-                  </p>
+                  <h2 className="text-2xl font-bold text-slate-900">{content.intakeForm.documents.heading}</h2>
+                  <p className="text-base text-slate-700">{content.intakeForm.documents.description}</p>
+
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-sm font-medium text-slate-800">{content.intakeForm.documents.examples.heading}</p>
+                    <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-700">
+                      {content.intakeForm.documents.examples.items.map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
 
                   <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4">
                     <label htmlFor="documents" className="block text-sm font-medium text-slate-800">
-                      Choose files
+                      {content.intakeForm.documents.chooseFiles}
                     </label>
                     <input
                       id="documents"
@@ -432,7 +475,8 @@ export function IntakePage() {
                       onChange={handleFileChange}
                       className="mt-3 block w-full text-sm text-slate-600 file:mr-4 file:rounded file:border-0 file:bg-cap-primary file:px-4 file:py-2 file:text-sm file:font-medium file:text-white"
                     />
-                    <p className="mt-3 text-xs text-slate-600">PDF, JPG, or PNG up to 10 MB per file.</p>
+                    <p className="mt-3 text-xs text-slate-600">{content.intakeForm.documents.allowedTypesDescription}</p>
+                    <p className="mt-1 text-xs text-slate-600">{content.intakeForm.documents.maxFileSizeWarning}</p>
                   </div>
 
                   {values.documents.length > 0 && (
@@ -448,20 +492,23 @@ export function IntakePage() {
                             className="text-sm font-medium text-status-error underline underline-offset-2"
                             onClick={() => setFieldValue('documents', [])}
                           >
-                            Remove
+                            {content.intakeForm.documents.remove}
                           </button>
                         </li>
                       ))}
                     </ul>
                   )}
 
-                  <button
-                    type="button"
-                    className="text-sm font-medium text-cap-primary underline underline-offset-2"
-                    onClick={() => setFieldValue('documents', [])}
-                  >
-                    Skip this step
-                  </button>
+                  <div className="space-y-1">
+                    <p className="text-sm text-slate-600">{content.intakeForm.documents.skipLabel}</p>
+                    <button
+                      type="button"
+                      className="text-sm font-medium text-cap-primary underline underline-offset-2"
+                      onClick={() => setFieldValue('documents', [])}
+                    >
+                      {content.intakeForm.documents.skipButtonLabel}
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -472,16 +519,16 @@ export function IntakePage() {
                   onClick={() => setCurrentStep((step) => Math.max(0, step - 1))}
                   disabled={currentStep === 0}
                 >
-                  Back
+                  {content.intakeForm.navigation.back}
                 </Button>
 
                 {currentStep < totalSteps - 1 ? (
                   <Button type="button" onClick={handleNext}>
-                    Continue
+                    {content.intakeForm.navigation.continue}
                   </Button>
                 ) : (
-                  <Button type="button" onClick={handleNext} isLoading={submissionStatus === 'loading'}>
-                    Submit Request
+                  <Button type="button" onClick={handleNext} disabled={submissionStatus === 'loading'}>
+                    {submissionStatus === 'loading' ? content.submission.submitting.label : content.intakeForm.navigation.submit}
                   </Button>
                 )}
               </div>
@@ -492,3 +539,4 @@ export function IntakePage() {
     </Formik>
   )
 }
+

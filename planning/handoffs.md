@@ -2,7 +2,7 @@
 This is a frequently updated doc of what the next steps should be. It is sorted by the responsible agent.
 
 ## Status
-The project is past the foundation milestone and is now in the downstream feature implementation phase. The app shell, design system, content layer, and informational routes are in place, and the remaining work is concentrated on the intake experience, service integrations, and final QA.
+The project is past the foundation milestone and is now in the downstream feature implementation phase. The app shell, design system, content layer, informational routes, and the localized intake form flow are in place, and the remaining work is concentrated on service integrations (ZIP lookup, submission, document upload), navigation polish, and final QA.
 
 ## Current plan position
 This repo is in the middle of the product-facing implementation phase, not the startup or infrastructure phase.
@@ -10,10 +10,10 @@ This repo is in the middle of the product-facing implementation phase, not the s
 Where we are in the plan:
 - Foundation is complete and stable.
 - Design system is complete and verified.
-- Content + localization layer is complete.
+- Content + localization layer is complete and now consumed by the app shell, info pages, and intake form.
 - Informational pages for /how-we-help and /intake are complete.
-- The intake form flow itself is still pending.
-- Navigation polish, service behavior, and end-to-end QA remain.
+- The intake form flow (ZIP, language, contact, documents, submission) is implemented and switches live between English and Spanish.
+- Service-backed ZIP/data/submission behavior, navigation polish, and end-to-end QA remain.
 
 This means the next person picking up work should treat the project as a partially built CAP app with route shells, typed content, and reusable form components already in place; the next required work is feature completion rather than scaffolding.
 
@@ -22,19 +22,17 @@ This means the next person picking up work should treat the project as a partial
 - Phase 2: Design system and reusable UI — complete
 - Phase 3: Content and localization — complete
 - Phase 4: Informational pages — complete
-- Phase 5: Intake shell and step flow — still pending
-- Phase 6: ZIP, language, contact, documents, and submission flows — still pending
+- Phase 5: Intake shell and step flow — in-app step flow implemented; behavior/UX polish pending (Intake Form Agent)
+- Phase 6: ZIP, language, contact, documents, and submission flows — localized flow implemented with live EN/ES switching; service-backed behavior pending with the Services Agent
 - Phase 7: Service refinement and accessibility QA — still pending
 - Phase 8: Final end-to-end validation and release readiness — still pending
 
 ## What still needs to be done
-- Implement the multi-step Formik intake flow on /intake/:id.
-- Build ZIP lookup behavior, skip flow, and unknown ZIP handling.
-- Add the language, contact, and documents steps with validation and accessible error states.
-- Define the final submission behavior and success/error states.
-- Preserve the no-persistence requirement and ensure no PHI is stored in browser storage.
-- Finish route/navigation polish so the app shell feels calm and mobile-first.
-- Validate the full experience as one app with real end-to-end behavior and regression checks.
+- Wire service-backed ZIP lookup behavior, unknown ZIP handling, and data access (Services Agent).
+- Add realistic submission, document upload, and retry behavior behind the service contracts (Services Agent).
+- Complete the intake form polish on top of the wired localized flow: accessible error summary review, submission/retry behavior refinement, and regression checks (Intake Form Agent).
+- Finish route/navigation polish so the app shell feels calm and mobile-first, including the intake experience (Navigation Agent).
+- Validate the full app as one experience with end-to-end and regression checks (Integration / QA Agent).
 
 ## Next agent assignments
 
@@ -54,12 +52,15 @@ Start work on:
 
 ### Intake Form Agent
 Start work on:
-- Formik multi-step intake flow
-- ZIP, language, contact, and document steps
-- validation UX and submission state handling
-- preserving the no-persistence requirement and keeping PHI out of browser storage
-- using step-level validation and accessible error summary patterns described in the plan
-- Note: the "Start a New Request" CTA now lives in IntakeLandingPage.tsx (the old IntakeStartButton export was removed from IntakePage.tsx)
+- finish the intake form polish on top of the localized flow already wired in IntakePage.tsx (ZIP, language, contact, documents, and submission steps render from the content layer and switch live between English and Spanish)
+- accessible error summary pattern review against the plan's description
+- submission/retry state review and any UX refinement
+- regression checks on the localized flow after the Services Agent lands
+
+Notes:
+- This pass only wired copy and localization; the full Intake Form Agent, Services Agent, and QA work is not done.
+- The "Start a New Request" CTA lives in IntakeLandingPage.tsx (the old IntakeStartButton export was removed from IntakePage.tsx).
+- Unknown ZIP handling and service-backed ZIP lookup messaging will land with the Services Agent.
 
 ### Final QA / Integration Agent
 Start work on:
@@ -108,7 +109,14 @@ Completed:
 - Spanish translations with professional bilingual parity (es.ts)
 - Main export module with getContent() utility (index.ts)
 - Usage guide with component integration patterns (USAGE.md)
-- All checks verified: build, test, lint, typecheck all pass
+- Content-consumption integration follow-up ✓ (this pass):
+  - AppShell consumes content for brand, nav labels, nav aria-label, and footer copy.
+  - AppRouter's NotFoundPage renders entirely from content.notFound (no inline not-found copy); the informational pages consume content per-route (eyebrow, step kicker) from their own owned route files (HowWeHelpPage.tsx, IntakeLandingPage.tsx) with component-scoped getContent calls.
+  - IntakePage renders the whole form from getContent(values.language) inside the Formik render prop, so selecting Español on the language step switches the rest of the flow (labels, hints, validation messages, ZIP notice, document copy, buttons, and error screen) live to Spanish; validation messages come from the content layer via the step validator, and the success screen preserves the selected language through a submittedLanguage snapshot.
+  - Added bilingual keys (EN/ES parity): navigation.brand, navigation.mainNav.ariaLabel, howWeHelp.howItWorks.stepLabel, intakeForm.stepLabels, intakeForm.documents (chooseFiles/remove/skipButtonLabel), intakeForm.errors (zipMustBeFiveDigits/selectLanguage), and notFound.
+  - Fixed a value-override bug on the language step: RadioGroup spreads {...props} after value={option.value}, so passing value={values.language} forced every radio to the current language value (Spanish could never be selected). Removed the value prop from the IntakePage usage; Formik handleChange reads the radio's own value.
+  - Baseline regression suite (src/App.test.tsx and route tests) unchanged; EN→ES propagation verified with a temporary Spanish test, then removed before commit.
+- All checks verified: npm run test, build, lint, typecheck all pass.
 
 ### Informational Pages Agent ✓
 Completed:
@@ -120,6 +128,7 @@ Completed:
 - "Start a New Request" CTA on /intake generates /intake/:id with crypto.randomUUID() and labels from intakeLanding.startCta (moved out of IntakePage.tsx; IntakeStartButton removed)
 - Mobile-first layout, accessible heading hierarchy; no nested <main> landmarks, no nested interactive controls
 - Route-level regression tests in src/routes/HowWeHelpPage.test.tsx and src/routes/IntakeLandingPage.test.tsx
+- Flagged for CAP review: the how-we-help secondary CTA (content.howWeHelp.secondaryCta) still points at url: "#" until a real Consumer Resources URL is supplied (TODO comment in the content module)
 - Verified: npm run test, build, lint, typecheck all pass
 
 ### Navigation Agent
@@ -138,11 +147,10 @@ Start work on:
 
 ### Intake Form Agent
 Start work on:
-- Formik multi-step intake flow
-- ZIP, language, contact, and document steps
-- validation UX and submission state handling
-- preserving the no-persistence requirement and keeping PHI out of browser storage
-- using step-level validation and accessible error summary patterns described in the plan
+- finishing the intake form polish on top of the localized multi-step Formik flow in IntakePage.tsx (ZIP, language, contact, documents, submission)
+- step-level validation and accessible error summary pattern review against the plan
+- submission/retry behavior refinement and regression checks
+- the flow already switches live between English and Spanish from the language step; the remaining Intake Form Agent work is behavior/UX polish, not copy authoring
 
 ## High-level notes for future handoff
 - The repo is not at a final product state yet; the app is currently in the middle of feature implementation.
@@ -154,6 +162,7 @@ Start work on:
 ## Verification evidence
 - `cd "c:\Development\cap\cap"; npm run test; npm run build; npm run lint; npm run typecheck` passed
 - `cd "c:\Development\cap\cap"; npm run dev -- --host 0.0.0.0` started successfully and Vite reported the app at http://localhost:5173/
+- Localization integration pass: `npm run test` (3 files / 9 tests), `npm run build`, `npm run lint`, `npm run typecheck` all pass with the content-wired app shell, info pages, and intake form; EN→Spanish propagation verified end-to-end with a temporary test (language → contact → documents → submission success), removed before commit.
 
 ## Notes
 This foundation is intentionally minimal and stable. It is ready for downstream feature implementation without requiring any further infrastructure changes.

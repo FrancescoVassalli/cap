@@ -14,10 +14,12 @@ export const en: AllContent = {
   // ========================================================================
 
   navigation: {
+    brand: "CAP",
     logo: {
       alt: "Consumer Assistance Program",
     },
     mainNav: {
+      ariaLabel: "Main navigation",
       howWeHelp: "How We Help",
       getHelp: "Get Help",
     },
@@ -68,6 +70,7 @@ export const en: AllContent = {
 
     howItWorks: {
       heading: "How CAP Works",
+      stepLabel: (stepNumber: number) => `Step ${stepNumber}`,
       steps: [
         {
           stepNumber: 1,
@@ -163,6 +166,13 @@ export const en: AllContent = {
   // ========================================================================
 
   intakeForm: {
+    stepLabels: {
+      zip: "Location",
+      language: "Language",
+      contact: "Contact Information",
+      documents: "Documents",
+    },
+
     zip: {
       label: "What ZIP code do you live in?",
       hint: "We'll use this to help fill in your city and state.",
@@ -236,7 +246,10 @@ export const en: AllContent = {
           "Other relevant documents",
         ],
       },
+      chooseFiles: "Choose files",
+      remove: "Remove",
       skipLabel: "You can skip this step and provide documents later.",
+      skipButtonLabel: "Skip this step",
       maxFileSizeWarning: "Maximum file size is 10 MB per file.",
       maxTotalSizeWarning: "Maximum total upload size is 50 MB.",
       allowedTypesDescription: "Accepted file types: PDF, JPG, JPEG, PNG",
@@ -255,6 +268,8 @@ export const en: AllContent = {
       invalidEmail: "Please enter a valid email address.",
       invalidPhone: "Please enter a valid phone number.",
       invalidZip: "Please enter a valid ZIP code.",
+      zipMustBeFiveDigits: "ZIP code must be 5 digits",
+      selectLanguage: "Please select a language",
       invalidFileType: "This file type is not allowed.",
       fileTooLarge: "This file is too large. Maximum size is 10 MB.",
       totalSizeTooLarge: "Total file size exceeds the 50 MB limit.",
@@ -310,6 +325,17 @@ export const en: AllContent = {
         "For your privacy, this intake session has expired. Please start a new request.",
       newRequestLabel: "Start a New Request",
     },
+  },
+
+  // ========================================================================
+  // Not Found Page
+  // ========================================================================
+
+  notFound: {
+    heading: "We couldn't find that page.",
+    description: "The page may have moved or the link may be outdated.",
+    goToCapLabel: "Go to CAP",
+    getHelpLabel: "Get Help",
   },
 
   // ========================================================================

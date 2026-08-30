@@ -2,9 +2,8 @@ import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/forms/Button'
 import { getContent } from '@/content'
 
-const content = getContent('en')
-
 export function HowWeHelpPage() {
+  const content = getContent('en')
   const navigate = useNavigate()
   const { hero, whatWeHelp, howItWorks, whatWeDont, expectations, primaryCta, secondaryCta } =
     content.howWeHelp
@@ -16,7 +15,7 @@ export function HowWeHelpPage() {
         aria-labelledby="how-we-help-hero-heading"
         className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8 lg:p-10"
       >
-        <p className="text-sm font-semibold uppercase tracking-[0.15em] text-cap-primary">CAP</p>
+        <p className="text-sm font-semibold uppercase tracking-[0.15em] text-cap-primary">{content.navigation.brand}</p>
         <div className="space-y-4">
           <h1 id="how-we-help-hero-heading">{hero.title}</h1>
           <p className="max-w-2xl text-lg text-slate-700">{hero.subtitle}</p>
@@ -61,7 +60,7 @@ export function HowWeHelpPage() {
           {howItWorks.steps.map((step) => (
             <li key={step.stepNumber} className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
               <p className="text-sm font-semibold uppercase tracking-[0.15em] text-cap-primary">
-                Step {step.stepNumber}
+                {content.howWeHelp.howItWorks.stepLabel(step.stepNumber)}
               </p>
               <h3 className="mt-2 text-xl font-semibold text-slate-900">{step.title}</h3>
               <p className="mt-2 text-slate-700">{step.description}</p>
@@ -119,3 +118,4 @@ export function HowWeHelpPage() {
     </div>
   )
 }
+

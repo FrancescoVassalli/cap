@@ -15,10 +15,12 @@ export const es: AllContent = {
   // ========================================================================
 
   navigation: {
+    brand: "CAP",
     logo: {
       alt: "Programa de Asistencia al Consumidor",
     },
     mainNav: {
+      ariaLabel: "Navegación principal",
       howWeHelp: "Cómo Podemos Ayudar",
       getHelp: "Obtener Ayuda",
     },
@@ -69,6 +71,7 @@ export const es: AllContent = {
 
     howItWorks: {
       heading: "Cómo Funciona CAP",
+      stepLabel: (stepNumber: number) => `Paso ${stepNumber}`,
       steps: [
         {
           stepNumber: 1,
@@ -165,6 +168,13 @@ export const es: AllContent = {
   // ========================================================================
 
   intakeForm: {
+    stepLabels: {
+      zip: "Ubicación",
+      language: "Idioma",
+      contact: "Información de Contacto",
+      documents: "Documentos",
+    },
+
     zip: {
       label: "¿Cuál es el código postal en el que vive?",
       hint: "Lo usaremos para ayudar a llenar su ciudad y estado.",
@@ -238,7 +248,10 @@ export const es: AllContent = {
           "Otros documentos relevantes",
         ],
       },
+      chooseFiles: "Elegir archivos",
+      remove: "Quitar",
       skipLabel: "Puede saltar este paso y proporcionar documentos después.",
+      skipButtonLabel: "Saltar este paso",
       maxFileSizeWarning: "El tamaño máximo de archivo es 10 MB por archivo.",
       maxTotalSizeWarning: "El tamaño total máximo de carga es 50 MB.",
       allowedTypesDescription:
@@ -259,6 +272,8 @@ export const es: AllContent = {
         "Por favor, introduzca una dirección de correo electrónico válida.",
       invalidPhone: "Por favor, introduzca un número de teléfono válido.",
       invalidZip: "Por favor, introduzca un código postal válido.",
+      zipMustBeFiveDigits: "El código postal debe tener 5 dígitos",
+      selectLanguage: "Por favor, seleccione un idioma",
       invalidFileType: "Este tipo de archivo no está permitido.",
       fileTooLarge:
         "Este archivo es demasiado grande. El tamaño máximo es 10 MB.",
@@ -315,6 +330,18 @@ export const es: AllContent = {
         "Para su privacidad, esta sesión de solicitud ha expirado. Por favor, comience una nueva solicitud.",
       newRequestLabel: "Comenzar una Nueva Solicitud",
     },
+  },
+
+  // ========================================================================
+  // Not Found Page
+  // ========================================================================
+
+  notFound: {
+    heading: "No pudimos encontrar esa página.",
+    description:
+      "Es posible que la página se haya movido o que el enlace esté desactualizado.",
+    goToCapLabel: "Ir a CAP",
+    getHelpLabel: "Obtener Ayuda",
   },
 
   // ========================================================================

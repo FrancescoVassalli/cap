@@ -2,9 +2,8 @@ import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/forms/Button'
 import { getContent } from '@/content'
 
-const content = getContent('en')
-
 export function IntakeLandingPage() {
+  const content = getContent('en')
   const navigate = useNavigate()
   const { intakeLanding } = content
 
@@ -70,3 +69,4 @@ export function IntakeLandingPage() {
     </div>
   )
 }
+

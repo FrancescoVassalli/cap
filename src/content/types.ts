@@ -9,10 +9,12 @@
 // ============================================================================
 
 export interface NavigationContent {
+  brand: string;
   logo: {
     alt: string;
   };
   mainNav: {
+    ariaLabel: string;
     howWeHelp: string;
     getHelp: string;
   };
@@ -53,6 +55,7 @@ export interface HowWeHelpContent {
   };
   howItWorks: {
     heading: string;
+    stepLabel: (stepNumber: number) => string;
     steps: HowItWorksStep[];
   };
   whatWeDont: {
@@ -168,7 +171,10 @@ export interface DocumentsStepContent {
     heading: string;
     items: string[];
   };
+  chooseFiles: string;
+  remove: string;
   skipLabel: string;
+  skipButtonLabel: string;
   maxFileSizeWarning: string;
   maxTotalSizeWarning: string;
   allowedTypesDescription: string;
@@ -186,6 +192,8 @@ export interface FormErrorContent {
   invalidEmail: string;
   invalidPhone: string;
   invalidZip: string;
+  zipMustBeFiveDigits: string;
+  selectLanguage: string;
   invalidFileType: string;
   fileTooLarge: string;
   totalSizeTooLarge: string;
@@ -195,6 +203,12 @@ export interface FormErrorContent {
 }
 
 export interface IntakeFormContent {
+  stepLabels: {
+    zip: string;
+    language: string;
+    contact: string;
+    documents: string;
+  };
   zip: ZipStepContent;
   language: LanguageStepContent;
   contact: ContactStepContent;
@@ -254,6 +268,17 @@ export interface LegalContent {
 }
 
 // ============================================================================
+// Not Found Page Content
+// ============================================================================
+
+export interface NotFoundContent {
+  heading: string;
+  description: string;
+  goToCapLabel: string;
+  getHelpLabel: string;
+}
+
+// ============================================================================
 // All Content Root
 // ============================================================================
 
@@ -264,5 +289,6 @@ export interface AllContent {
   intakeLanding: IntakeLandingContent;
   intakeForm: IntakeFormContent;
   submission: SubmissionStateContent;
+  notFound: NotFoundContent;
   legal: LegalContent;
 }
