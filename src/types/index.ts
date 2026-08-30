@@ -30,10 +30,22 @@ export type ZipLocation = {
 
 export type SubmissionStatus = 'idle' | 'loading' | 'success' | 'error'
 
+/**
+ * Discriminates the intent of a failed submission so the UI can choose the
+ * correct copy (generic failure vs. network interruption vs. expired session).
+ */
+export type SubmissionErrorKind = 'error' | 'networkError' | 'sessionExpired'
+
 export type IntakeSubmissionResult = {
   success: boolean
   referenceId?: string
   message?: string
+  errorKind?: SubmissionErrorKind
+  /**
+   * Server-side field validation errors (email, postalCode, etc.). Mapped into
+   * Formik once the backend exists.
+   */
+  fieldErrors?: Record<string, string>
 }
 
 export type ContentSection = {

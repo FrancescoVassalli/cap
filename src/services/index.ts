@@ -1,0 +1,73 @@
+/**
+ * Service registry / dependency-injection boundary.
+ *
+ * The form and its hooks consume services from here rather than instantiating
+ * concrete adapters directly. This keeps business behavior behind the service
+ * contracts and makes the eventual swap to a real backend a configuration
+ * change rather than a rewrite of the intake UI.
+ *
+ * Selection is driven by an explicit mode (defaulting to the static prototype)
+ * so tests and future environments can compose different adapters without
+ * touching the form layer.
+ */
+import { createSubmissionService, type SubmissionService } from './submissionService'
+import { zipService, type ZipService } from './zipService'
+import { createDocumentUploadService, type DocumentUploadService } from './documentUploadService'
+
+export type ServiceMode = 'mock' | 'local'
+export type ProductionServiceMode = 'email' | 'api' | 's3'
+
+export type ServiceSelection = {
+  /** Static-prototype mode: in-memory adapters. */
+  mode?: ServiceMode
+  /** Production adapter configuration when a backend exists. */
+  production?: {
+    submission?: 'email' | 'api'
+    documentUpload?: 's3'
+    recipient?: string
+    baseUrl?: string
+  }
+}
+
+export type Services = {
+  zip: ZipService
+  submission: SubmissionService
+  documentUpload: DocumentUploadService
+}
+
+function buildServices(selection: ServiceSelection = {}): Services {
+  const prod = selection.production
+  // Static-prototype modes ('mock' | 'local') both map to the in-memory
+  // submission adapter; production selections override the concrete adapter.
+  const submissionMode = prod?.submission ?? 'mock'
+  const uploadMode = prod?.documentUpload ?? 'local'
+
+  return {
+    zip: zipService,
+    submission: createSubmissionService(submissionMode, {
+      recipient: prod?.recipient,
+      baseUrl: prod?.baseUrl,
+    }),
+    documentUpload: createDocumentUploadService(uploadMode, {
+      baseUrl: prod?.baseUrl,
+    }),
+  }
+}
+
+/**
+ * Default service composition for the running app. Tests can build alternate
+ * compositions with `buildServices`.
+ */
+export const services: Services = buildServices()
+
+/**
+ * Composes a set of services from an explicit selection. Useful for tests and
+ * for environments that need a specific production adapter.
+ */
+export function createServices(selection: ServiceSelection = {}): Services {
+  return buildServices(selection)
+}
+
+export type { SubmissionService, ZipService, DocumentUploadService }
+export { SubmissionError } from './submissionService'
+export { DocumentUploadError } from './documentUploadService'

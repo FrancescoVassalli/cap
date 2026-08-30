@@ -3,11 +3,9 @@ import { Button } from '@/components/forms/Button'
 import { FileInput } from '@/components/forms/FileInput'
 import { FormField } from '@/components/forms/FormField'
 import type { AllContent } from '@/content'
-import { LocalDocumentUploadService } from '@/services/documentUploadService'
+import { useDocumentUpload } from '@/hooks/useDocumentUpload'
 import type { IntakeDocument } from '@/types/index'
 import { validateDocumentFiles } from '@/validation/documentValidation'
-
-const uploadService = new LocalDocumentUploadService()
 
 interface DocumentsStepProps {
   content: AllContent
@@ -33,6 +31,7 @@ export function DocumentsStep({
   onClearDocuments,
 }: DocumentsStepProps) {
   const [documentErrors, setDocumentErrors] = useState<string[]>([])
+  const { upload } = useDocumentUpload()
 
   const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const selected = Array.from(event.target.files ?? [])
@@ -45,17 +44,12 @@ export function DocumentsStep({
 
     const uploaded: IntakeDocument[] = []
     for (const file of result.accepted) {
-      try {
-        const uploadedDocument = await uploadService.upload(file, intakeId)
-        uploaded.push({
-          id: uploadedDocument.id,
-          name: uploadedDocument.name,
-          size: file.size,
-          type: file.type || 'application/octet-stream',
-        })
-      } catch {
+      const attempt = await upload(file, intakeId)
+      if (attempt.error) {
         setDocumentErrors((current) => [...current, content.intakeForm.errors.generic])
+        continue
       }
+      uploaded.push(attempt.document)
     }
 
     if (uploaded.length > 0) {

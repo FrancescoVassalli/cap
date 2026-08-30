@@ -1,11 +1,13 @@
 import { Form, Formik } from 'formik'
 import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { Button } from '@/components/forms/Button'
+import { Container } from '@/components/layout'
+import { IntakeProgress } from '@/components/navigation'
 import { getContent } from '@/content'
 import { INTAKE_STEP_COUNT, useIntakeNavigation } from '@/hooks/useIntakeNavigation'
-import { MockSubmissionService } from '@/services/submissionService'
-import { MockZipService } from '@/services/zipService'
-import type { IntakeDocument, IntakeFormValues, SubmissionStatus } from '@/types/index'
+import { useIntakeSubmission } from '@/hooks/useIntakeSubmission'
+import { useZipLookup } from '@/hooks/useZipLookup'
+import type { IntakeDocument, IntakeFormValues } from '@/types/index'
 import { createIntakeSchema } from '@/validation/intakeSchema'
 import { INTAKE_STEP_FIELDS, validateIntakeStep, type IntakeFieldErrors } from '@/validation/intakeStepValidation'
 import { ContactStep } from './ContactStep'
@@ -15,9 +17,6 @@ import { LanguageStep } from './LanguageStep'
 import { SubmissionError } from './SubmissionError'
 import { SubmissionSuccess } from './SubmissionSuccess'
 import { ZipStep } from './ZipStep'
-
-const zipService = new MockZipService()
-const submissionService = new MockSubmissionService()
 
 const TOTAL_STEPS = INTAKE_STEP_COUNT
 
@@ -43,9 +42,9 @@ interface IntakeFormProps {
 
 export function IntakeForm({ intakeId }: IntakeFormProps) {
   const { currentStep, goNext, goBack, canGoBack } = useIntakeNavigation(TOTAL_STEPS)
-  const [submissionStatus, setSubmissionStatus] = useState<SubmissionStatus>('idle')
-  const [submissionError, setSubmissionError] = useState<'error' | 'networkError'>('error')
-  const [referenceId, setReferenceId] = useState('')
+  const { lookup } = useZipLookup()
+  const submission = useIntakeSubmission()
+  const { status: submissionStatus, errorKind, referenceId } = submission
   const [submittedLanguage, setSubmittedLanguage] = useState<'en' | 'es'>('en')
   const [zipNotice, setZipNotice] = useState('')
   const [triedToContinue, setTriedToContinue] = useState(false)
@@ -58,39 +57,28 @@ export function IntakeForm({ intakeId }: IntakeFormProps) {
     stepHeadingRef.current?.focus()
   }, [currentStep])
 
+  const submissionError: 'error' | 'networkError' = errorKind === 'networkError' ? 'networkError' : 'error'
+
   const handleSubmission = async (values: IntakeFormValues) => {
     setSubmittedLanguage(values.language)
-    setSubmissionStatus('loading')
-    try {
-      const result = await submissionService.submit({
-        zipCode: values.zipCode,
-        language: values.language,
-        firstName: values.firstName,
-        lastName: values.lastName,
-        email: values.email,
-        phone: values.phone,
-        streetAddress: values.streetAddress,
-        apartment: values.apartment,
-        city: values.city,
-        state: values.state,
-      })
-
-      if (!result.success) {
-        setSubmissionError('error')
-        setSubmissionStatus('error')
-        return
-      }
-
-      setReferenceId(result.referenceId || 'CAP-0000')
-      setSubmissionStatus('success')
-    } catch {
-      setSubmissionError('networkError')
-      setSubmissionStatus('error')
-    }
+    await submission.submit({
+      intakeId,
+      zipCode: values.zipCode,
+      language: values.language,
+      firstName: values.firstName,
+      lastName: values.lastName,
+      email: values.email,
+      phone: values.phone,
+      streetAddress: values.streetAddress,
+      apartment: values.apartment,
+      city: values.city,
+      state: values.state,
+      documents: values.documents,
+    })
   }
 
   const handleRetry = () => {
-    setSubmissionStatus('idle')
+    submission.reset()
   }
 
   if (submissionStatus === 'success') {
@@ -163,7 +151,7 @@ export function IntakeForm({ intakeId }: IntakeFormProps) {
             },
           })
 
-          const location = zipService.lookup(nextZip)
+          const { location } = lookup(nextZip)
           if (location) {
             setFieldValue('city', location.city)
             setFieldValue('state', location.state)
@@ -246,15 +234,18 @@ export function IntakeForm({ intakeId }: IntakeFormProps) {
         }
 
         return (
-          <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
-            <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-              <p className="text-sm font-medium uppercase tracking-wide text-slate-600">
-                {content.intakeForm.navigation.progressLabel(stepMeta.stepNumber, totalSteps)}
-              </p>
+          <Container size="md" className="py-8 sm:py-10">
+            <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+              <IntakeProgress
+                current={stepMeta.stepNumber}
+                total={totalSteps}
+                progressText={content.intakeForm.navigation.progressLabel(stepMeta.stepNumber, totalSteps)}
+                ariaLabel={content.intakeForm.navigation.progressAriaLabel}
+              />
               <h1
                 ref={stepHeadingRef}
                 tabIndex={-1}
-                className="mt-1 text-2xl font-bold text-cap-primary focus:outline-none focus:ring-2 focus:ring-cap-primary focus:ring-offset-2"
+                className="mt-3 text-2xl font-bold text-cap-primary focus:outline-none focus:ring-2 focus:ring-cap-primary focus:ring-offset-2"
               >
                 {stepMeta.label}
               </h1>
@@ -346,7 +337,7 @@ export function IntakeForm({ intakeId }: IntakeFormProps) {
                 )}
               </div>
             </Form>
-          </div>
+          </Container>
         )
       }}
     </Formik>
