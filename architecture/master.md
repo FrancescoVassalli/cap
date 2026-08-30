@@ -2,7 +2,7 @@
 
 ## Current status
 
-The CAP frontend has moved past the initial scaffold phase and is now in the downstream implementation phase. The project is no longer primarily about setup and infrastructure; the informational pages and the localized intake form flow are implemented, and the remaining work is focused on service-backed refinements (ZIP lookup, submission, document upload), navigation polish, and validating the app as a cohesive experience.
+The CAP frontend has moved past the initial scaffold phase and is now in the downstream implementation phase. The project is no longer primarily about setup and infrastructure; the informational pages and the localized EN/ES intake form flow are implemented, and the remaining work is focused on service-backed refinements (ZIP lookup, submission, document upload), intake form polish, navigation polish, and validating the app as a cohesive experience.
 
 The most current implementation status is captured in [../planning/handoffs.md](../planning/handoffs.md), which identifies the project as being in the product-facing feature stage rather than the startup phase.
 
@@ -22,9 +22,13 @@ The most current implementation status is captured in [../planning/handoffs.md](
 - Shared layout-building blocks such as containers, card surfaces, and app shell framing
 
 ### Content and localization layer
-- Typed English and Spanish content modules
-- Centralized copy for informational and flow-related UI
-- Clear separation between content model and components to support future localization updates
+- Typed English and Spanish content modules (src/content/types.ts, en.ts, es.ts, index.ts)
+- Centralized copy for navigation, informational pages, intake form steps, submission states, and legal notices
+- Clear separation between the content model and components; the content layer is now actually consumed by the app rather than sitting unused:
+  - The app shell renders brand, nav labels, nav aria-label, and footer copy from the navigation content module
+  - Informational pages render from their owned route files with component-scoped `getContent()` calls, and NotFound renders entirely from a `notFound` content block
+  - The intake form derives content from `getContent(values.language)` inside the Formik render prop, so selecting Español on the language step switches the whole remaining flow to Spanish live
+  - No large copy blocks remain inline in components; new copy must be added to the content modules with bilingual (EN/ES) key parity
 
 ### Informational pages
 - /how-we-help page with the service overview, process steps, expectations, and trust-building content
@@ -35,12 +39,22 @@ The most current implementation status is captured in [../planning/handoffs.md](
 - Route-level regression tests (src/routes/HowWeHelpPage.test.tsx and src/routes/IntakeLandingPage.test.tsx) cover the eligibility/orientation content and the CTA flow into the intake route
 - Known placeholder: the secondary CTA on /how-we-help (content.howWeHelp.secondaryCta) still links to url: "#" and needs a real Consumer Resources URL from CAP review
 
+### Localized intake form flow
+- Multi-step Formik flow implemented on /intake/:id covering ZIP, language, contact, documents, and submission
+- Live EN/ES switching: the form renders from `getContent(values.language)` inside the Formik render prop, so choosing Español on the language step immediately switches labels, hints, placeholders, validation messages, ZIP notices, document copy, buttons, and the error screen to Spanish; the success screen preserves the selected language through a `submittedLanguage` snapshot
+- Validation messages come from the content layer via the step validator (no inline error strings)
+- ZIP step supports optional lookup with frontend autofill of city/state (still editable), a skip flow, and an unknown-ZIP notice, all via the existing zip service contract
+- Submission flow has idle/loading/success/error states and renders the reference number on the success screen
+- No-persistence requirement preserved: no PHI or consumer data written to browser storage, URL parameters, analytics, or client logs
+- Baseline regression suite (src/App.test.tsx and route tests) covers the full happy path; all tests pass
+
 ## Remaining work
 
-The multi-step intake form flow (ZIP, language, contact, documents, submission) is implemented on /intake/:id with live EN/ES switching, step-level validation, success/error states, and the no-persistence requirement (no PHI stored in browser storage). The remaining work is concentrated on service behavior, navigation polish, and final validation:
+The localized multi-step intake flow is in place, but behavior behind the service contracts and the final presentation pass are still pending:
 
-- Wire service-backed ZIP lookup behavior, skip logic, and unknown ZIP handling
-- Add realistic submission, document upload, and retry behavior behind the service contracts
+- Wire service-backed ZIP lookup behavior (data access and unknown ZIP handling) behind the zip service contract
+- Add realistic submission, document upload, and retry behavior behind the submission and document-upload adapters
+- Complete intake form polish: step-level validation UX, accessible error summary pattern, submission/retry state refinement, and regression checks
 - Finish navigation polish and route consistency across the app shell
 - Validate the complete end-to-end experience in QA
 
@@ -52,25 +66,30 @@ The application is intentionally designed as a static, mobile-first frontend pro
 - Vite for a lightweight build/dev workflow
 - Tailwind for styling and responsive design
 - Formik + Yup for intake validation flow
-- Centralized content modules for bilingual copy
-- Service abstractions for ZIP lookup, submission, and document upload
+- Centralized content modules for bilingual copy, consumed by components at render time
+- Service abstractions for ZIP lookup, submission, and document upload so the static prototype can be replaced by a backend without rewriting the intake UI
 - No browser persistence for intake data to keep sensitive information out of local storage
 
 ## Key implementation files
 
 - [../src/App.tsx](../src/App.tsx)
-- [../src/routes/AppRouter.tsx](../src/routes/AppRouter.tsx)
+- [../src/routes/AppRouter.tsx](../src/routes/AppRouter.tsx) (also holds the content-driven NotFoundPage)
 - [../src/routes/HowWeHelpPage.tsx](../src/routes/HowWeHelpPage.tsx)
 - [../src/routes/IntakeLandingPage.tsx](../src/routes/IntakeLandingPage.tsx)
+- [../src/routes/IntakePage.tsx](../src/routes/IntakePage.tsx)
 - [../src/routes/HowWeHelpPage.test.tsx](../src/routes/HowWeHelpPage.test.tsx)
 - [../src/routes/IntakeLandingPage.test.tsx](../src/routes/IntakeLandingPage.test.tsx)
+- [../src/components/layout/AppShell.tsx](../src/components/layout/AppShell.tsx)
 - [../src/types/index.ts](../src/types/index.ts)
 - [../src/validation/intakeSchema.ts](../src/validation/intakeSchema.ts)
 - [../src/services/zipService.ts](../src/services/zipService.ts)
 - [../src/services/submissionService.ts](../src/services/submissionService.ts)
 - [../src/services/documentUploadService.ts](../src/services/documentUploadService.ts)
 - [../src/content/index.ts](../src/content/index.ts)
+- [../src/content/types.ts](../src/content/types.ts)
+- [../src/content/en.ts](../src/content/en.ts)
+- [../src/content/es.ts](../src/content/es.ts)
 
 ## Bottom line
 
-The project is functionally past the foundation milestone and has a stable UI shell, reusable design system, content architecture, informational pages, and an implemented localized intake flow in place. The remaining value is in wiring service-backed behavior (ZIP lookup, submission, uploads), navigation polish, and verifying the full application behavior end-to-end.
+The project is functionally past the foundation milestone and has a stable UI shell, reusable design system, content architecture that is fully consumed by the app, informational pages, and a localized bilingual intake flow in place. The remaining value is in wiring service-backed behavior (ZIP lookup, submission, uploads), intake form polish, navigation polish, and verifying the full application behavior end-to-end.
