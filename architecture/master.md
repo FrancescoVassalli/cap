@@ -2,7 +2,7 @@
 
 ## Current status
 
-The CAP frontend has moved past the initial scaffold phase and is now in the downstream implementation phase. The project is no longer primarily about setup and infrastructure; the remaining work is focused on completing the intake flow, integrating service behaviors, and validating the app as a cohesive experience.
+The CAP frontend has moved past the initial scaffold phase and is now in the downstream implementation phase. The project is no longer primarily about setup and infrastructure; the informational pages and the localized intake form flow are implemented, and the remaining work is focused on service-backed refinements (ZIP lookup, submission, document upload), navigation polish, and validating the app as a cohesive experience.
 
 The most current implementation status is captured in [../planning/handoffs.md](../planning/handoffs.md), which identifies the project as being in the product-facing feature stage rather than the startup phase.
 
@@ -26,20 +26,21 @@ The most current implementation status is captured in [../planning/handoffs.md](
 - Centralized copy for informational and flow-related UI
 - Clear separation between content model and components to support future localization updates
 
-### Informational routes
-- /how-we-help page with the service overview and trust-building content
-- /intake landing page with orientation and next-step guidance
-- Route-level structure ready for later flow implementation
+### Informational pages
+- /how-we-help page with the service overview, process steps, expectations, and trust-building content
+- /intake landing page with orientation, what-you-need guidance, and an explicit privacy / information notice
+- Both pages live in dedicated owned route files (src/routes/HowWeHelpPage.tsx and src/routes/IntakeLandingPage.tsx) and render entirely from the typed content modules; section copy and CTA labels come from the content layer rather than inline strings
+- The Start CTA on /intake is content-driven and generates /intake/:id via crypto.randomUUID(), so visitors only enter the form once they are oriented and know what to expect
+- Accessible, mobile-first structure: no nested <main> landmarks, no nested interactive controls, semantic heading hierarchy, keyboard-accessible actions, and visible focus states
+- Route-level regression tests (src/routes/HowWeHelpPage.test.tsx and src/routes/IntakeLandingPage.test.tsx) cover the eligibility/orientation content and the CTA flow into the intake route
+- Known placeholder: the secondary CTA on /how-we-help (content.howWeHelp.secondaryCta) still links to url: "#" and needs a real Consumer Resources URL from CAP review
 
 ## Remaining work
 
-The main remaining gap is the intake experience itself:
+The multi-step intake form flow (ZIP, language, contact, documents, submission) is implemented on /intake/:id with live EN/ES switching, step-level validation, success/error states, and the no-persistence requirement (no PHI stored in browser storage). The remaining work is concentrated on service behavior, navigation polish, and final validation:
 
-- Build the multi-step Formik intake flow on /intake/:id
-- Implement ZIP lookup, skip logic, and unknown ZIP handling
-- Add the language, contact, and documents steps with validation and error feedback
-- Define final submission UX and success/error states
-- Preserve the no-persistence requirement and avoid storing PHI in browser storage
+- Wire service-backed ZIP lookup behavior, skip logic, and unknown ZIP handling
+- Add realistic submission, document upload, and retry behavior behind the service contracts
 - Finish navigation polish and route consistency across the app shell
 - Validate the complete end-to-end experience in QA
 
@@ -59,6 +60,10 @@ The application is intentionally designed as a static, mobile-first frontend pro
 
 - [../src/App.tsx](../src/App.tsx)
 - [../src/routes/AppRouter.tsx](../src/routes/AppRouter.tsx)
+- [../src/routes/HowWeHelpPage.tsx](../src/routes/HowWeHelpPage.tsx)
+- [../src/routes/IntakeLandingPage.tsx](../src/routes/IntakeLandingPage.tsx)
+- [../src/routes/HowWeHelpPage.test.tsx](../src/routes/HowWeHelpPage.test.tsx)
+- [../src/routes/IntakeLandingPage.test.tsx](../src/routes/IntakeLandingPage.test.tsx)
 - [../src/types/index.ts](../src/types/index.ts)
 - [../src/validation/intakeSchema.ts](../src/validation/intakeSchema.ts)
 - [../src/services/zipService.ts](../src/services/zipService.ts)
@@ -68,4 +73,4 @@ The application is intentionally designed as a static, mobile-first frontend pro
 
 ## Bottom line
 
-The project is functionally past the foundation milestone and has a stable UI shell, reusable system, and content architecture in place. The remaining value is in shipping the intake flow and verifying the full application behavior end-to-end.
+The project is functionally past the foundation milestone and has a stable UI shell, reusable design system, content architecture, informational pages, and an implemented localized intake flow in place. The remaining value is in wiring service-backed behavior (ZIP lookup, submission, uploads), navigation polish, and verifying the full application behavior end-to-end.
