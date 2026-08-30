@@ -49,22 +49,6 @@ Start work on:
 - document upload abstraction refinements
 - aligning service boundaries with the planned static prototype and future backend architecture
 
-### Intake Form Agent ✓
-Completed:
-- Verified the localized multi-step Formik flow in IntakeForm.tsx (ZIP, language, contact, documents, submission) renders entirely from the content layer and switches live between English and Spanish.
-- Fixed a step-validation bug where stale whole-form Formik errors blocked progress: the current step now gates on the step validator (`validateIntakeStep`) as the authoritative source, and field errors refresh as the user edits.
-- Fixed an accessible focus bug where the error summary re-stole keyboard focus on every remount while typing; focus now moves to the error summary once per failed Continue attempt (WCAG 2.2 AA).
-- Componentized step content under src/components/intake/ (ZipStep, LanguageStep, ContactStep, DocumentsStep, IntakeForm, SubmissionSuccess/Error) with navigation behind src/hooks/useIntakeNavigation.ts.
-- Preserved ZIP skip/unknown-ZIP messaging and city/state autofill that remains editable, document validation (size/type/duplicate), and submission states with duplicate-click prevention and content-driven success/error screens. No browser storage.
-- Fixed pre-existing `tsc -b` errors (indexing `stepErrors[field]` with `string`, and `documentValidation.ts` accepted-type includes) so the production build is green.
-- Added focused regression tests in src/components/intake/IntakeForm.test.tsx covering step navigation, ZIP autofill/skip/unknown, required-field and email validation, content-driven success screen, and no-persistence.
-- Verified: npm run test (19), build, lint, typecheck all pass.
-
-Notes:
-- The prior handoff pass only wired copy and localization; the full Intake Form Agent, Services Agent, and QA work is not done.
-- The "Start a New Request" CTA lives in IntakeLandingPage.tsx (the old IntakeStartButton export was removed from IntakePage.tsx).
-- Unknown ZIP handling and service-backed ZIP lookup messaging will land with the Services Agent.
-
 ### Final QA / Integration Agent
 Start work on:
 - validating the experience as one app
@@ -125,6 +109,18 @@ Completed:
 - Flagged for CAP review: the how-we-help secondary CTA (content.howWeHelp.secondaryCta) still points at url: "#" until a real Consumer Resources URL is supplied (TODO comment in the content module)
 - Verified: npm run test, build, lint, typecheck all pass
 
+### Intake Form Agent ✓
+Completed:
+- Verified the localized multi-step Formik flow in IntakeForm.tsx (ZIP, language, contact, documents, submission) renders entirely from the content layer and switches live between English and Spanish.
+- Fixed a step-validation bug where stale whole-form Formik errors blocked progress: the current step now gates on the step validator (`validateIntakeStep`) as the authoritative source, and field errors refresh as the user edits.
+- Fixed an accessible focus bug where the error summary re-stole keyboard focus on every remount while typing; focus now moves to the error summary once per failed Continue attempt (WCAG 2.2 AA).
+- Componentized step content under src/components/intake/ (ZipStep, LanguageStep, ContactStep, DocumentsStep, IntakeForm, SubmissionSuccess/Error, ErrorSummary) with navigation behind src/hooks/useIntakeNavigation.ts.
+- Preserved ZIP skip/unknown-ZIP messaging and city/state autofill that remains editable, document validation (size/type/duplicate), and submission states with duplicate-click prevention and content-driven success/error screens. No browser storage.
+- Fixed pre-existing `tsc -b` errors (indexing `stepErrors[field]` with `string`, and `documentValidation.ts` accepted-type includes) so the production build is green.
+- Added focused regression tests in src/components/intake/IntakeForm.test.tsx covering step navigation, ZIP autofill/skip/unknown, required-field and email validation, content-driven success screen, and no-persistence.
+- Verified: npm run test (4 files / 19 tests), build, lint, typecheck all pass.
+- Notes: the "Start a New Request" CTA lives in IntakeLandingPage.tsx (old IntakeStartButton export removed from IntakePage.tsx); unknown ZIP handling and service-backed ZIP lookup messaging will land with the Services Agent.
+
 ## High-level notes for future handoff
 - The repo is not at a final product state yet; the app is currently in the middle of feature implementation.
 - The foundation is stable and should not require additional architecture changes unless a new dependency or service contract becomes necessary.
@@ -134,15 +130,12 @@ Completed:
 - The application should stay intentionally simple and static for the prototype while preserving a clean path to the eventual CRM/backend architecture.
 
 ## Working tree note (current)
-The committed code is green (see Verification evidence). The working tree also contains uncommitted, in-flight work from the Intake Form Agent's component/validation extraction pass; leave those files to that agent:
-- Modified: src/App.test.tsx, src/routes/IntakePage.tsx, src/validation/intakeSchema.ts
-- Untracked: src/components/intake/, src/hooks/, src/validation/documentValidation.ts, src/validation/intakeStepValidation.ts
-- Deleted: opencode.json (unrelated removal; do not restore unless intended)
-Do not commit, revert, or reformat these files from outside the Intake Form Agent pass.
+The Intake Form Agent's component/validation extraction and behavior pass is now committed (`accf474`) with all checks green, so there is no in-flight uncommitted intake work anymore. The only unrelated working-tree change is a deletion of `opencode.json` (do not restore unless intended). The next pass (Services Agent, Navigation Agent, or final QA) can start from the committed HEAD.
 
 ## Verification evidence
 - `cd "c:\Development\cap\cap"; npm run test; npm run build; npm run lint; npm run typecheck` passed (committed HEAD)
-- Localization integration pass: `npm run test` (3 files / 9 tests), `npm run build`, `npm run lint`, `npm run typecheck` all pass with the content-wired app shell, info pages, and intake form; EN→Spanish propagation verified end-to-end with a temporary test (language → contact → documents → submission success), removed before commit.
+- Intake Form Agent pass (HEAD `accf474`): `npm run test` (4 files / 19 tests), `npm run build`, `npm run lint`, `npm run typecheck` all pass; production build (`tsc -b`) green including fixes for pre-existing `tsc -b` type errors in step-validation indexing and documentValidation accepted-type includes
+- Localization integration pass (earlier): EN→Spanish propagation verified end-to-end across language → contact → documents → submission success
 
 ## Agent boundaries (reference)
 Each agent is given a task, a scope, allowed files, dependencies, and acceptance criteria. The canonical source is [planning/orchestration.md](./orchestration.md); the highlights below are maintained for quick reference.
