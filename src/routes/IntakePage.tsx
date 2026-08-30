@@ -1,6 +1,5 @@
 import { Form, Formik, type FormikHelpers } from 'formik'
 import { useMemo, useState, type ChangeEvent } from 'react'
-import { type NavigateFunction } from 'react-router-dom'
 import { Button } from '@/components/forms/Button'
 import { FormField } from '@/components/forms/FormField'
 import { RadioGroup } from '@/components/forms/RadioGroup'
@@ -491,18 +490,5 @@ export function IntakePage() {
         )
       }}
     </Formik>
-  )
-}
-
-export function IntakeStartButton({ navigate }: { navigate: NavigateFunction }) {
-  const beginIntake = () => {
-    const intakeId = crypto.randomUUID()
-    navigate(`/intake/${intakeId}`)
-  }
-
-  return (
-    <Button type="button" onClick={beginIntake}>
-      Start a new request
-    </Button>
   )
 }
