@@ -2,11 +2,11 @@
 
 ## Current status
 
-The CAP frontend has moved past the initial scaffold phase and is now in the downstream implementation phase. The project is no longer primarily about setup and infrastructure; the informational pages and the localized EN/ES intake form flow are implemented (with accessible validation and submission states), and the remaining work is focused on service-backed refinements (ZIP lookup, submission, document upload), navigation polish, and validating the app as a cohesive experience.
+The CAP frontend has moved past the initial scaffold phase and is now in the downstream implementation phase. The project is no longer primarily about setup and infrastructure; the informational pages and the localized EN/ES intake form flow are implemented (with accessible validation and submission states), the app shell and navigation are polished, and the service layer is finalized behind real adapters and dedicated hooks. The remaining work is final end-to-end QA/validation of the assembled application.
 
 The most current implementation status is captured in [../planning/handoffs.md](../planning/handoffs.md), which identifies the project as being in the product-facing feature stage rather than the startup phase.
 
-For documented implementation drift against the original plan, see [./implementation-audit.md](./implementation-audit.md). This audit captures the key discrepancy between the architecture plan and the current repo: the service layer is present as interfaces but still operationalizes mock implementations, and the app shell remains a minimal static shell rather than a fully polished route experience.
+For documented implementation drift against the original plan, see [./implementation-audit.md](./implementation-audit.md). The original audit's primary discrepancy — a service layer backed only by in-place mocks — has been resolved: the service contracts are now backed by real adapters and consumed through dedicated hooks and a service registry. The audit also records the resolved navigation polish gap.
 
 ## Completed work
 
@@ -65,12 +65,21 @@ For documented implementation drift against the original plan, see [./implementa
 - Accessibility preserved/improved: visible focus rings, 44px touch targets in the header, semantic landmarks, no color-only progress indication, and mobile-first reflow (the two-item main nav remains visible without a hidden menu).
 - New regression tests cover the shell (skip link, brand home link, active-route nav, footer disclaimer/copyright) and the intake progress component.
 
+### Service layer
+- Replaced the in-place mock ZIP adapter with `StaticZipService`, a dataset-driven adapter backed by a real Colorado ZIP dataset (`src/data/zipCodes.json`). It returns the postal locality for known codes and `null` for unknown, blank, or malformed codes, so the intake can show the “We couldn't find that ZIP code” notice and continue without blocking.
+- Defined and implemented multiple submission adapters behind `SubmissionService`: `MockSubmissionService` (in-memory prototype), `EmailSubmissionService` (dev/demo notification that deliberately avoids placing PHI or documents in a `mailto:` URL), and `ApiSubmissionService` (production shape with an `Idempotency-Key`, network/session/server-field error discrimination, and no raw exceptions surfaced).
+- Defined and implemented multiple document-upload adapters behind `DocumentUploadService`: `LocalDocumentUploadService` (prototype, UI-only) and `PresignedS3DocumentUploadService` (production presigned-URL flow that safe-throws when a backend is not configured so the UI never implies secure storage).
+- Introduced a service registry / dependency-injection boundary (`src/services/index.ts`) so the form layer never instantiates concrete service classes directly; adapter selection is a configuration concern.
+- Introduced the hook-based business-logic layer called for by the plan: `useZipLookup`, `useIntakeSubmission`, and `useDocumentUpload`, and wired them into `IntakeForm` and `DocumentsStep`.
+- Submission error states are discriminated (`error` vs. `networkError` vs. `sessionExpired`) so the UI maps each to the correct content copy without exposing exceptions; retry resets submission state via the hook.
+- Unit tests (`src/services/zipService.test.ts`, `submissionService.test.ts`, `documentUploadService.test.ts`) cover data access, unknown/blank/malformed ZIPs, error discrimination, idempotency header, presigned-URL flow, and storage-key safety (never using the original filename as a security boundary).
+
 ## Remaining work
 
-The localized multi-step intake flow is implemented and green, and the app shell/navigation is polished. Remaining items are service verification and final QA:
+The service layer, app shell, and intake flow are implemented and green. Remaining items are final QA and release-readiness:
 
-- Verify the concrete service-backed ZIP lookup, submission, and document-upload adapters and their hook-based consumption (`useZipLookup`, `useIntakeSubmission`, `useDocumentUpload`) — Services Agent.
-- Validate the complete end-to-end experience in QA (state flow, step navigation, skip logic, success handling, accessibility, mobile behavior) before signoff.
+- Validate the complete end-to-end experience in QA (state flow, step navigation, skip logic, service error/retry states, success handling, accessibility, mobile behavior) before signoff.
+- Exercise the `ApiSubmissionService` and `PresignedS3DocumentUploadService` adapters against a real backend contract once one is available.
 
 ## Architecture direction
 
@@ -103,9 +112,17 @@ The application is intentionally designed as a static, mobile-first frontend pro
 - [../src/routes/IntakeLandingPage.test.tsx](../src/routes/IntakeLandingPage.test.tsx)
 - [../src/components/layout/AppShell.tsx](../src/components/layout/AppShell.tsx)
 - [../src/types/index.ts](../src/types/index.ts)
+- [../src/data/zipCodes.json](../src/data/zipCodes.json)
+- [../src/services/index.ts](../src/services/index.ts)
 - [../src/services/zipService.ts](../src/services/zipService.ts)
 - [../src/services/submissionService.ts](../src/services/submissionService.ts)
 - [../src/services/documentUploadService.ts](../src/services/documentUploadService.ts)
+- [../src/services/zipService.test.ts](../src/services/zipService.test.ts)
+- [../src/services/submissionService.test.ts](../src/services/submissionService.test.ts)
+- [../src/services/documentUploadService.test.ts](../src/services/documentUploadService.test.ts)
+- [../src/hooks/useZipLookup.ts](../src/hooks/useZipLookup.ts)
+- [../src/hooks/useIntakeSubmission.ts](../src/hooks/useIntakeSubmission.ts)
+- [../src/hooks/useDocumentUpload.ts](../src/hooks/useDocumentUpload.ts)
 - [../src/content/index.ts](../src/content/index.ts)
 - [../src/content/types.ts](../src/content/types.ts)
 - [../src/content/en.ts](../src/content/en.ts)
@@ -113,4 +130,4 @@ The application is intentionally designed as a static, mobile-first frontend pro
 
 ## Bottom line
 
-The project is functionally past the foundation milestone and has a stable UI shell, reusable design system, content architecture that is fully consumed by the app, informational pages, a localized bilingual multi-step intake flow with accessible validation and submission states, and a completed navigation polish pass (header/footer, route consistency, intake progress, and route-level orientation). The remaining value is in verifying the service-backed behavior (ZIP lookup, submission, uploads) and validating the full application behavior end-to-end.
+The project is functionally past the foundation milestone and has a stable UI shell, reusable design system, content architecture that is fully consumed by the app, informational pages, a localized bilingual multi-step intake flow with accessible validation and submission states, a completed navigation polish pass (header/footer, route consistency, intake progress, and route-level orientation), and a finalized service layer (real ZIP/submission/upload adapters behind a service registry and dedicated hooks). The remaining value is validating the full application behavior end-to-end in final QA.

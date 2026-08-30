@@ -2,11 +2,11 @@
 This is the current implementation handoff for the CAP frontend. It reflects the verified state of the repo and the remaining work needed before the project is ready for final integration.
 
 ## Lead summary
-Status: the prototype is functionally complete and green in the current branch, but it is not yet ready for final integration because the service layer is still mock-based and the shell/navigation polish is incomplete.
+Status: the service layer is now finalized behind real adapters and hook-based consumption boundaries, and the navigation/shell polish is complete. The remaining work before final integration is a full end-to-end QA / Integration pass across the assembled application.
 
-The app has already delivered the foundation, design system, localized bilingual intake flow, and the public informational routes. The main remaining work is not startup scaffolding; it is service completion, route polish, and final end-to-end validation.
+The app has delivered the foundation, design system, localized bilingual intake flow, the public informational routes, a calm mobile-first shell, and a service layer that no longer depends on direct form-layer mocks.
 
-Recommendation: do not treat this as a release-ready app yet. Treat it as a strong prototype that is close to integration, with the next work concentrated on the Services Agent and Navigation Agent, followed by a final QA / Integration pass.
+Recommendation: the next (and final) implementation wave is the Integration / QA Agent to validate the app end-to-end and confirm accessibility and mobile UX before sign-off.
 
 ## Current implementation status
 Verified as of 2026-08-30:
@@ -16,6 +16,7 @@ Verified as of 2026-08-30:
 - /how-we-help and /intake are implemented and tested.
 - The multi-step intake flow on /intake/:id is implemented and locally passes tests.
 - The app shell, header/footer, and route-level navigation have been refined into a calm, mobile-first CAP experience (Navigation Agent).
+- The service layer is finalized behind real adapters and routed through dedicated hooks (Services Agent).
 - The project passes: `npm run test`, `npm run build`, `npm run lint`, and `npm run typecheck`.
 
 ## Verified implementation reality
@@ -25,31 +26,25 @@ The repo is materially ahead of the original planning baseline:
 - The application does not persist intake data in browser storage.
 - Service interfaces exist for ZIP lookup, submission, and document upload.
 - The app shell now includes a skip-to-content link, a sticky brand/header, active-route main navigation, a real content-driven footer with the legal disclaimer, and route-level focus/scroll restoration.
+- The service contracts are backed by real adapters: a dataset-driven `StaticZipService` for ZIP lookup, submission adapters (`Mock`/`Email`/`Api`) behind `SubmissionService`, and document-upload adapters (`Local`/`PresignedS3`) behind `DocumentUploadService`, composed through a `src/services` registry.
+- The form layer consumes services through dedicated hooks (`useZipLookup`, `useIntakeSubmission`, `useDocumentUpload`) instead of instantiating concrete service classes directly.
 
 ## Known gaps vs the plan
 These remain the gating issues for final integration:
-- The ZIP lookup, submission, and upload services are implemented behind the service contracts but the concrete adapters and the hook-based consumption boundaries are the responsibility of the Services Agent to verify and finalize.
 - The app is not yet validated as a full end-to-end experience across routing, skip flows, service behaviors, and mobile usage.
-- The architecture is close to the plan; the intended business logic layering (`useZipLookup`, `useIntakeSubmission`, `useDocumentUpload`) has been introduced and final wiring verification belongs to the Services Agent and the Integration Agent.
+- The service layer is functionally complete for the static prototype but is not yet exercised against a real backend contract; the `ApiSubmissionService` and `PresignedS3DocumentUploadService` adapters are ready but not live.
 
 ## Next agent assignments
 
 ### 1. Services Agent
-Priority: highest
-Required work:
-- Verify and finalize the concrete service adapters behind the service contracts (ZIP lookup with real data access and unknown-ZIP handling, submission, document-upload).
-- Confirm the hook-based consumption boundaries (`useZipLookup`, `useIntakeSubmission`, `useDocumentUpload`) are wired into the form layer and build cleanly.
-- Validate service error states and retry behavior against content and UX expectations.
-- Provide unknown-ZIP handling and submission/upload error handling that matches the UI content.
-
-Allowed scope:
-- src/services/*
-- src/data/*
-- src/types/*
-- src/hooks/* (service-related hooks)
-- relevant integration points where services are consumed
-
-Do not broaden scope into unrelated app features.
+Priority: done
+Completed work:
+- Replaced the mock ZIP lookup with `StaticZipService`, a dataset-driven adapter backed by a real Colorado ZIP dataset (`src/data/zipCodes.json`). Unknown or malformed ZIPs return `null` so the intake never blocks and the “We couldn't find that ZIP code” notice renders.
+- Defined and implemented realistic submission adapters behind `SubmissionService`: `MockSubmissionService` (in-memory prototype), `EmailSubmissionService` (dev/demo, PHI-limited), and `ApiSubmissionService` (production shape with idempotency header and mapped network/session/server-field errors).
+- Defined and implemented realistic document-upload adapters behind `DocumentUploadService`: `LocalDocumentUploadService` (prototype, UI-only, never claims secure storage) and `PresignedS3DocumentUploadService` (production presigned-URL contract, safe-throws when unconfigured).
+- Introduced a service registry / DI boundary (`src/services/index.ts`) so the form layer no longer instantiates concrete services directly.
+- Introduced the hook-based consumption boundaries (`useZipLookup`, `useIntakeSubmission`, `useDocumentUpload`) and wired them into `IntakeForm` and `DocumentsStep`.
+- Added unit tests for the ZIP, submission, and document-upload services covering data access, unknown/blank/malformed ZIPs, error discrimination (network vs. session vs. server-field), idempotency header, and storage-key safety.
 
 ### 2. Navigation Agent
 Priority: done
@@ -70,29 +65,25 @@ Required work:
 - Run the final verification pass across the repo before sign-off.
 
 ## Integration recommendation
-Status: not ready for final integration yet.
+Status: functionally complete; one remaining implementation wave (final QA) before sign-off.
 
 Reason:
-- Navigation polish is complete and the shell is consistent, but the service adapters still need the Services Agent’s verification (they were mid-refactor during the navigation pass) before a final QA pass can sign off.
-- The next implementation step should be service completion/verification, then final QA.
-
-The implementation is ready for the next implementation wave, not for final production-style integration.
+- Navigation polish is complete and the service layer is finalized behind real adapters and hook boundaries. The remaining value is an end-to-end validation pass that exercises the assembled application, service error/retry states, skip flows, accessibility, and mobile behavior as one experience.
 
 ## Agent boundaries reference
-- Services Agent: ownership of ZIP, submission, and document-upload adapters
+- Services Agent: ownership of ZIP, submission, and document-upload adapters — completed
 - Navigation Agent: ownership of route shell polish and mobile UX consistency — completed
 - Integration / QA Agent: ownership of end-to-end validation and release readiness
 
 ## Verification evidence
-- `cd "c:\Development\cap\cap"; npm run test; npm run build; npm run lint; npm run typecheck` succeeded after the navigation pass.
-- Result: 7 test files passed, 33 tests passed (including AppShell navigation, intake-progress, and service-hook tests), production build succeeded, lint was clean, and typecheck succeeded.
+- `cd "c:\Development\cap\cap"; npm run test; npm run build; npm run lint; npm run typecheck` succeeded after the services pass.
+- Result: 9 test files passed, 53 tests passed (including AppShell navigation, intake-progress, and ZIP/submission/document-upload service tests), production build succeeded (`tsc -b` strict), lint was clean, and typecheck succeeded.
 
 ## Working note for the next handoff
-This is a stable prototype with strong feature coverage. The navigation/shell polish is complete; the remaining value is in service adapter verification and the final end-to-end QA pass.
+This is a stable prototype with strong feature coverage. Navigation/shell polish and the service layer are complete; the remaining value is the final end-to-end QA pass across the assembled application.
 
 The next agent sequence should be:
-1. Services Agent (verify/finalize adapters and hook wiring)
-2. Integration / QA Agent
-3. Final accessibility audit under the WCAG 2.2 AA target
+1. Integration / QA Agent (end-to-end validation: routing, skip flows, service error/retry, submission states, accessibility, mobile)
+2. Final accessibility audit under the WCAG 2.2 AA target
 
 That sequence keeps the architecture honest and reduces the chance of polishing around mock behavior without a real backend contract.

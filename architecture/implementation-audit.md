@@ -1,55 +1,54 @@
 # Implementation Audit
 
 ## Purpose
-This document captures the gaps between the original frontend implementation guide and the current repository state. It is intended to help the next agent pick up the real remaining work without assuming the project is still at the design or foundation phase.
+This document captures the gaps between the original frontend implementation guide and the current repository state, and tracks which gaps have been closed. It helps the next agent pick up the real remaining work without assuming the project is still at the design or foundation phase.
 
 ## Summary
-The implementation is materially ahead of the initial planning baseline and is functionally green. The product-facing app shell, content layer, public routes, and Formik intake form are all present and working. However, the current code is not yet a true final integration-ready product because the service contracts are still backed by local mock implementations instead of production-style adapters, and the route shell still feels minimal rather than polished.
+The implementation is materially ahead of the initial planning baseline and is functionally green. The product-facing app shell, content layer, public routes, navigation polish, service layer, and Formik intake form are all present, working, and wired together. The service contracts are no longer backed by in-place mocks; they are backed by real adapters behind a service registry and consumed through dedicated hooks. The remaining work is a final end-to-end QA / Integration pass and, later, exercising the production-shaped adapters against a real backend.
 
 ## Verified status
 The repo passes the project verification commands:
-- `npm run test`
+- `npm run test` (9 test files, 53 tests)
 - `npm run build`
 - `npm run lint`
 - `npm run typecheck`
 
-This confirms the implementation is stable and the feature set currently in the codebase is consistent and buildable.
+The production build uses the stricter `tsc -b` check and is green.
 
 ## Where implementation matches the plan
-The following plan items are implemented or well underway:
+The following plan items are implemented:
 - Vite + React + TypeScript foundation
 - route shell with /how-we-help, /intake, /intake/:id, and wildcard page
 - typed bilingual content model
 - reusable form controls and layout primitives
 - localized multi-step intake flow with Formik and step validation
 - no browser storage for intake data
-- service contracts for ZIP lookup, document upload, and submission
+- service contracts for ZIP lookup, document upload, and submission, backed by realistic adapters
 - production build and test tooling
+- app shell / header / footer / route navigation polished into a calm, mobile-first CAP experience
 
-## Where implementation diverges from the plan
-### 1. Service layer remains prototype-grade
-The architecture guide explicitly calls for a separation between UI and service behavior. The repository includes the abstraction boundaries, but the actual implementations are still mocked in-place:
-- `MockZipService` in `src/services/zipService.ts`
-- `MockSubmissionService` in `src/services/submissionService.ts`
-- `LocalDocumentUploadService` in `src/services/documentUploadService.ts`
+## Gaps that have been closed
+### 1. Service layer is now production-shaped, not merely mocked
+The original audit flagged that the ZIP, submission, and document-upload services were still in-place mocks. This is resolved:
+- `MockZipService` was replaced by `StaticZipService`, a dataset-driven adapter backed by `src/data/zipCodes.json`, with correct unknown/blank/malformed ZIP handling.
+- `SubmissionService` now has multiple adapters: `MockSubmissionService`, `EmailSubmissionService` (dev/demo, PHI-limited), and `ApiSubmissionService` (production shape with idempotency and error discrimination).
+- `DocumentUploadService` now has `LocalDocumentUploadService` (prototype, UI-only) and `PresignedS3DocumentUploadService` (production presigned-URL flow, safe-throws when unconfigured).
+- Adapters are composed through a service registry (`src/services/index.ts`) rather than instantiated in the form layer.
 
-This means the app works as a static prototype, but it is not yet representing the real backend contract or the eventual CRM/email/document-storage design described in the implementation guide.
+### 2. Business logic moved out of the form layer
+The original audit flagged concrete service instantiation inside the intake component. This is resolved: the form consumes services through `useZipLookup`, `useIntakeSubmission`, and `useDocumentUpload` hooks, keeping the components dumb and the business behavior behind service boundaries.
 
-### 2. App shell is functional but not fully polished
-The guide calls for a more deliberate route navigation and mobile-first presentation. The current `AppShell` is minimal and works, but it does not yet reflect the complete shell behavior implied by the product plan.
+### 3. App shell and navigation are polished
+The original audit flagged a minimal shell and utilitarian route experience. This is resolved by the navigation pass: skip-to-content link, sticky brand header with active-route navigation, content-driven footer with legal disclaimer, a visible intake progress indicator, a shared responsive `Container`, and route-level focus/scroll restoration — all mobile-first and accessible.
 
-### 3. Route-level experience is complete, but not fully refined
-The public pages and form flow are implemented and pass tests, yet the project still has a final presentation pass to make the shell feel more intentionally CAP-branded and calmer during the intake flow.
-
-## Architectural decision still pending
-The repo includes service abstractions and the intake flow is structured around them, but the implementation still uses concrete service instances directly inside the form component. This is a drift from the ideal architecture, which expects business behavior to be moved into dedicated hooks/services and kept out of the rendering logic.
-
-The design is close to the plan, but the code still reflects a transitional prototype state more than a matured implementation.
+## Remaining gaps vs the plan
+- The app is not yet validated as a single end-to-end experience (routing, state flow, ZIP skip/unknown, document skipping, submission error/retry, success paths, accessibility, mobile) — the Integration / QA pass.
+- The `ApiSubmissionService` and `PresignedS3DocumentUploadService` adapters are ready but not yet exercised against a real backend; no backend exists for the static prototype.
 
 ## Recommendation
 The implementation should proceed in the following order:
-1. Services Agent: real adapters and data flow
-2. Navigation Agent: route shell refinement and mobile polish
-3. Final QA / Integration Agent: full app validation
+1. Final QA / Integration Agent: validate the assembled app end-to-end before sign-off.
+2. Final accessibility audit under the WCAG 2.2 AA target, if not already covered by the QA pass.
+3. Wire the production-shaped adapters (`ApiSubmissionService`, `PresignedS3DocumentUploadService`) to the real backend once available.
 
-This sequence preserves the architectural boundary and ensures the final QA pass tests the real service behavior rather than mock placeholders.
+This preserves the architectural boundaries established in the plan.
