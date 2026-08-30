@@ -30,7 +30,6 @@ The next person picking up work should treat the project as a partially built CA
 ## What still needs to be done
 - Wire service-backed ZIP lookup behavior, unknown ZIP handling, and data access (Services Agent).
 - Add realistic submission, document upload, and retry behavior behind the service contracts (Services Agent).
-- Complete the intake form polish on top of the wired localized flow: step-level validation UX, accessible error summary review, submission/retry refinement, and regression checks (Intake Form Agent).
 - Finish route/navigation polish so the app shell feels calm and mobile-first, including the intake experience (Navigation Agent).
 - Validate the full app as one experience with end-to-end and regression checks (Integration / QA Agent).
 
@@ -50,12 +49,16 @@ Start work on:
 - document upload abstraction refinements
 - aligning service boundaries with the planned static prototype and future backend architecture
 
-### Intake Form Agent
-Start work on:
-- finishing intake form behavior polish on top of the localized multi-step Formik flow in IntakePage.tsx (ZIP, language, contact, documents, and submission steps already render from the content layer and switch live between English and Spanish)
-- step-level validation UX and accessible error summary pattern review against the plan
-- submission/retry state review and any UX refinement
-- regression checks on the localized flow after the Services Agent lands
+### Intake Form Agent ✓
+Completed:
+- Verified the localized multi-step Formik flow in IntakeForm.tsx (ZIP, language, contact, documents, submission) renders entirely from the content layer and switches live between English and Spanish.
+- Fixed a step-validation bug where stale whole-form Formik errors blocked progress: the current step now gates on the step validator (`validateIntakeStep`) as the authoritative source, and field errors refresh as the user edits.
+- Fixed an accessible focus bug where the error summary re-stole keyboard focus on every remount while typing; focus now moves to the error summary once per failed Continue attempt (WCAG 2.2 AA).
+- Componentized step content under src/components/intake/ (ZipStep, LanguageStep, ContactStep, DocumentsStep, IntakeForm, SubmissionSuccess/Error) with navigation behind src/hooks/useIntakeNavigation.ts.
+- Preserved ZIP skip/unknown-ZIP messaging and city/state autofill that remains editable, document validation (size/type/duplicate), and submission states with duplicate-click prevention and content-driven success/error screens. No browser storage.
+- Fixed pre-existing `tsc -b` errors (indexing `stepErrors[field]` with `string`, and `documentValidation.ts` accepted-type includes) so the production build is green.
+- Added focused regression tests in src/components/intake/IntakeForm.test.tsx covering step navigation, ZIP autofill/skip/unknown, required-field and email validation, content-driven success screen, and no-persistence.
+- Verified: npm run test (19), build, lint, typecheck all pass.
 
 Notes:
 - The prior handoff pass only wired copy and localization; the full Intake Form Agent, Services Agent, and QA work is not done.

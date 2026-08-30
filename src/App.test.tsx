@@ -48,7 +48,8 @@ describe('App shell', () => {
 
     await user.type(screen.getByLabelText(/zip code/i), '123')
     await user.click(screen.getByRole('button', { name: /continue/i }))
-    expect(screen.getByText(/zip code must be 5 digits/i)).toBeInTheDocument()
+    expect(screen.getAllByText(/zip code must be 5 digits/i).length).toBeGreaterThan(0)
+    expect(screen.getByRole('alert')).toHaveTextContent(/there are issues to fix/i)
 
     await user.clear(screen.getByLabelText(/zip code/i))
     await user.type(screen.getByLabelText(/zip code/i), '80203')
