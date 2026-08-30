@@ -59,6 +59,7 @@ Start work on:
 - validation UX and submission state handling
 - preserving the no-persistence requirement and keeping PHI out of browser storage
 - using step-level validation and accessible error summary patterns described in the plan
+- Note: the "Start a New Request" CTA now lives in IntakeLandingPage.tsx (the old IntakeStartButton export was removed from IntakePage.tsx)
 
 ### Final QA / Integration Agent
 Start work on:
@@ -112,12 +113,14 @@ Completed:
 ### Informational Pages Agent ✓
 Completed:
 - /how-we-help page with hero, service grid, process steps, expectations, and CTAs
-- /intake landing page with orientation, what-you-need guidance, and trust messaging
-- Content-driven rendering from structured copy modules
-- Mobile-first layout and accessible heading hierarchy
-- RadioGroup accessibility fix for language selection
-- Route-level regression tests validating page content and intake flow
-- All tests passing: npm run test succeeds
+- /intake landing page with orientation, what-you-need guidance, trust/privacy, and eligibility messaging
+- Pages live in the owned route files: src/routes/HowWeHelpPage.tsx and src/routes/IntakeLandingPage.tsx (previously inlined in AppRouter.tsx)
+- Content-driven rendering from the typed content modules; CTA labels come from the content layer (no inline copy)
+- Explicit privacy / information notice on /intake rendered from the legal content module
+- "Start a New Request" CTA on /intake generates /intake/:id with crypto.randomUUID() and labels from intakeLanding.startCta (moved out of IntakePage.tsx; IntakeStartButton removed)
+- Mobile-first layout, accessible heading hierarchy; no nested <main> landmarks, no nested interactive controls
+- Route-level regression tests in src/routes/HowWeHelpPage.test.tsx and src/routes/IntakeLandingPage.test.tsx
+- Verified: npm run test, build, lint, typecheck all pass
 
 ### Navigation Agent
 Start work on:
