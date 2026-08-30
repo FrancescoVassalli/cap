@@ -6,6 +6,8 @@ The CAP frontend has moved past the initial scaffold phase and is now in the dow
 
 The most current implementation status is captured in [../planning/handoffs.md](../planning/handoffs.md), which identifies the project as being in the product-facing feature stage rather than the startup phase.
 
+For documented implementation drift against the original plan, see [./implementation-audit.md](./implementation-audit.md). This audit captures the key discrepancy between the architecture plan and the current repo: the service layer is present as interfaces but still operationalizes mock implementations, and the app shell remains a minimal static shell rather than a fully polished route experience.
+
 ## Completed work
 
 ### Foundation and app shell
@@ -54,14 +56,21 @@ The most current implementation status is captured in [../planning/handoffs.md](
 - The old `IntakeStartButton` export was removed from IntakePage.tsx; the "Start a New Request" CTA now lives in IntakeLandingPage.tsx
 - Known: the `npm run typecheck` script (tsc --noEmit on the solution tsconfig) passes trivially; the production `npm run build` (tsc -b) is the stricter check and is green
 
+### App shell and navigation polish
+- Refined `AppShell` into a calm, mobile-first shell: a skip-to-content link, a sticky brand header with active-route `NavLink`s (which publish `aria-current="page"`), a bare `<main id="main-content">` landmark, and a content-driven footer that includes the legal disclaimer and copyright.
+- Introduced dedicated navigation components under `src/components/navigation/`: `SkipLink`, `SiteBrand`, `MainNav`, `FooterNav`, `IntakeProgress`, and `RouteFocus`.
+- The multi-step intake flow now shows a visible segmented progress bar with an accessible “Step X of Y” label, so the visitor always knows where they are in the form.
+- Route pages were normalized onto the shared `Container` primitive (a new `xl` width was added) so /how-we-help, /intake, /intake/:id, and the not-found page share consistent horizontal rhythm and vertical spacing.
+- Route transitions reset scroll and move focus to the page heading on pathname change, keeping screen-reader users oriented without interfering with the intake step focus management.
+- Accessibility preserved/improved: visible focus rings, 44px touch targets in the header, semantic landmarks, no color-only progress indication, and mobile-first reflow (the two-item main nav remains visible without a hidden menu).
+- New regression tests cover the shell (skip link, brand home link, active-route nav, footer disclaimer/copyright) and the intake progress component.
+
 ## Remaining work
 
-The localized multi-step intake flow is implemented and green, but behavior behind the service contracts and the final presentation pass are still pending:
+The localized multi-step intake flow is implemented and green, and the app shell/navigation is polished. Remaining items are service verification and final QA:
 
-- Wire service-backed ZIP lookup behavior (data access and unknown ZIP handling) behind the zip service contract
-- Add realistic submission, document upload, and retry behavior behind the submission and document-upload adapters
-- Finish navigation polish and route consistency across the app shell (header behavior feel calm and mobile-friendly during the intake flow)
-- Validate the complete end-to-end experience in QA (state flow, step navigation, skip logic, success handling, accessibility, mobile behavior) before signoff
+- Verify the concrete service-backed ZIP lookup, submission, and document-upload adapters and their hook-based consumption (`useZipLookup`, `useIntakeSubmission`, `useDocumentUpload`) — Services Agent.
+- Validate the complete end-to-end experience in QA (state flow, step navigation, skip logic, success handling, accessibility, mobile behavior) before signoff.
 
 ## Architecture direction
 
@@ -78,10 +87,13 @@ The application is intentionally designed as a static, mobile-first frontend pro
 ## Key implementation files
 
 - [../src/App.tsx](../src/App.tsx)
-- [../src/routes/AppRouter.tsx](../src/routes/AppRouter.tsx) (also holds the content-driven NotFoundPage)
+- [../src/routes/AppRouter.tsx](../src/routes/AppRouter.tsx) (installs `RouteFocus` and the route table)
+- [../src/routes/NotFoundPage.tsx](../src/routes/NotFoundPage.tsx)
 - [../src/routes/HowWeHelpPage.tsx](../src/routes/HowWeHelpPage.tsx)
 - [../src/routes/IntakeLandingPage.tsx](../src/routes/IntakeLandingPage.tsx)
 - [../src/routes/IntakePage.tsx](../src/routes/IntakePage.tsx)
+- [../src/components/layout/AppShell.tsx](../src/components/layout/AppShell.tsx)
+- [../src/components/navigation/](../src/components/navigation/) (SkipLink, SiteBrand, MainNav, FooterNav, IntakeProgress, RouteFocus)
 - [../src/components/intake/IntakeForm.tsx](../src/components/intake/IntakeForm.tsx) (with ZipStep, LanguageStep, ContactStep, DocumentsStep, SubmissionSuccess, SubmissionError, ErrorSummary, and IntakeForm.test.tsx)
 - [../src/hooks/useIntakeNavigation.ts](../src/hooks/useIntakeNavigation.ts)
 - [../src/validation/intakeSchema.ts](../src/validation/intakeSchema.ts)
@@ -101,4 +113,4 @@ The application is intentionally designed as a static, mobile-first frontend pro
 
 ## Bottom line
 
-The project is functionally past the foundation milestone and has a stable UI shell, reusable design system, content architecture that is fully consumed by the app, informational pages, and a localized bilingual multi-step intake flow with accessible validation and submission states in place. The remaining value is in wiring service-backed behavior (ZIP lookup, submission, uploads), navigation polish, and verifying the full application behavior end-to-end.
+The project is functionally past the foundation milestone and has a stable UI shell, reusable design system, content architecture that is fully consumed by the app, informational pages, a localized bilingual multi-step intake flow with accessible validation and submission states, and a completed navigation polish pass (header/footer, route consistency, intake progress, and route-level orientation). The remaining value is in verifying the service-backed behavior (ZIP lookup, submission, uploads) and validating the full application behavior end-to-end.
