@@ -13,6 +13,9 @@ export interface NavigationContent {
   logo: {
     alt: string;
   };
+  skipLink: {
+    label: string;
+  };
   mainNav: {
     ariaLabel: string;
     howWeHelp: string;
@@ -22,6 +25,8 @@ export interface NavigationContent {
     label: string;
   };
   footer: {
+    ariaLabel: string;
+    navLabel: string;
     copyright: string;
   };
 }
@@ -185,6 +190,7 @@ export interface FormNavigationContent {
   continue: string;
   submit: string;
   progressLabel: (current: number, total: number) => string;
+  progressAriaLabel: string;
 }
 
 export interface FormErrorContent {

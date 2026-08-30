@@ -19,6 +19,9 @@ export const es: AllContent = {
     logo: {
       alt: "Programa de Asistencia al Consumidor",
     },
+    skipLink: {
+      label: "Saltar al contenido principal",
+    },
     mainNav: {
       ariaLabel: "Navegación principal",
       howWeHelp: "Cómo Podemos Ayudar",
@@ -28,6 +31,8 @@ export const es: AllContent = {
       label: "Menú",
     },
     footer: {
+      ariaLabel: "Pie de página de CAP",
+      navLabel: "Navegación de pie de página",
       copyright: "© Iniciativa de Salud del Consumidor de Colorado. Todos los derechos reservados.",
     },
   },
@@ -264,6 +269,7 @@ export const es: AllContent = {
       submit: "Enviar Solicitud",
       progressLabel: (current: number, total: number) =>
         `Paso ${current} de ${total}`,
+      progressAriaLabel: "Progreso del formulario",
     },
 
     errors: {

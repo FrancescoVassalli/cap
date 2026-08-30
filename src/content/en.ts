@@ -18,6 +18,9 @@ export const en: AllContent = {
     logo: {
       alt: "Consumer Assistance Program",
     },
+    skipLink: {
+      label: "Skip to main content",
+    },
     mainNav: {
       ariaLabel: "Main navigation",
       howWeHelp: "How We Help",
@@ -27,6 +30,8 @@ export const en: AllContent = {
       label: "Menu",
     },
     footer: {
+      ariaLabel: "CAP footer",
+      navLabel: "Footer navigation",
       copyright: "© Colorado Consumer Health Initiative. All rights reserved.",
     },
   },
@@ -261,6 +266,7 @@ export const en: AllContent = {
       submit: "Submit Request",
       progressLabel: (current: number, total: number) =>
         `Step ${current} of ${total}`,
+      progressAriaLabel: "Form progress",
     },
 
     errors: {

@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/forms/Button'
+import { Container } from '@/components/layout'
 import { getContent } from '@/content'
 
 export function HowWeHelpPage() {
@@ -9,7 +10,7 @@ export function HowWeHelpPage() {
     content.howWeHelp
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <Container size="xl" className="py-8 sm:py-10">
       {/* Hero */}
       <section
         aria-labelledby="how-we-help-hero-heading"
@@ -111,11 +112,11 @@ export function HowWeHelpPage() {
             href={secondaryCta.url}
             className="inline-flex items-center justify-center rounded-md border border-slate-300 px-4 py-3 text-sm font-medium text-slate-700 transition hover:border-cap-primary hover:text-cap-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-cap-primary focus-visible:ring-offset-2"
           >
-            {secondaryCta.label}
+{secondaryCta.label}
           </a>
         </div>
       </section>
-    </div>
+    </Container>
   )
 }
 
