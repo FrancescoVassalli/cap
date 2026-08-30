@@ -1,0 +1,84 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "build": {
+      "mode": "primary",
+      "prompt": "{file:./Agents.md}",
+      "permission": {
+        "edit": "allow",
+        "bash": "allow"
+      }
+    },
+    "plan": {
+      "mode": "primary",
+      "prompt": "{file:../.github/agents/foundation.agent.md}",
+      "permission": {
+        "edit": "allow",
+        "bash": "allow"
+      }
+    },
+    "foundation": {
+      "mode": "subagent",
+      "description": "Use when bootstrapping or repairing the CAP frontend foundation: Vite React TypeScript setup, dependency installation, project structure, lint/test/build tooling, TypeScript interfaces, validation types, and a boring but working app shell without building pages or business flows. Best for the initial CAP consumer assistance frontend architecture and repository stabilization.",
+      "prompt": "{file:../.github/agents/foundation.agent.md}",
+      "permission": {
+        "edit": "allow",
+        "bash": "allow"
+      }
+    },
+    "frontend-implementation": {
+      "mode": "subagent",
+      "description": "Use when implementing the CAP frontend in this repo, especially the mobile-first informational pages, intake flow, routing, layout, accessibility work, Formik validation, Tailwind styling, and service boundaries described in the planning docs.",
+      "prompt": "{file:../.github/agents/cap-frontend-implementation.agent.md}",
+      "permission": {
+        "edit": "allow",
+        "bash": "allow"
+      }
+    },
+    "integration-audit": {
+      "mode": "subagent",
+      "description": "Use when validating the CAP frontend as one application after implementation: end-to-end flow testing, Formik state persistence, route navigation, ZIP behavior, document skipping, submission state, success handling, language propagation, and security/quality checks without adding features.",
+      "prompt": "{file:../.github/agents/cap-integration-audit.agent.md}",
+      "permission": {
+        "edit": "allow",
+        "bash": "allow"
+      }
+    },
+    "content-localization": {
+      "mode": "subagent",
+      "description": "Use when extracting approved CAP copy, structuring it as typed content data, creating bilingual English/Spanish content modules, and keeping components free of large copy blocks. Best for the CAP informational pages, navigation labels, intake copy, and legal text without inventing policy or legal language.",
+      "prompt": "{file:../.github/agents/content-localization.agent.md}",
+      "permission": {
+        "edit": "allow",
+        "bash": "allow"
+      }
+    },
+    "design-system": {
+      "mode": "subagent",
+      "description": "Use when building the reusable CAP frontend design layer: Tailwind tokens, responsive layout primitives, accessible form controls, and feedback components for the intake and informational pages. Best for creating the CAP/CCHI visual system and mobile-first UI primitives without implementing business logic or page-specific behavior.",
+      "prompt": "{file:../.github/agents/design-system.agent.md}",
+      "permission": {
+        "edit": "allow",
+        "bash": "allow"
+      }
+    },
+    "informational-pages": {
+      "mode": "subagent",
+      "description": "Use when creating the CAP informational and intake landing pages: /how-we-help, /intake, page-level copy, eligibility messaging, privacy notice, and the CTA flow into the intake experience. Best for explaining who CAP helps, what happens next, and whether a visitor is in the right place without implementing the actual form or backend services.",
+      "prompt": "{file:../.github/agents/informational-pages.agent.md}",
+      "permission": {
+        "edit": "allow",
+        "bash": "allow"
+      }
+    },
+    "intake-form": {
+      "mode": "subagent",
+      "description": "Use this agent for the CAP frontend intake flow: Formik multi-step form, ZIP lookup, language selection, contact details, document upload, submission state, accessibility checks, and tests scoped to the intake workflow.",
+      "prompt": "{file:../.github/agents/intake-form.agent.md}",
+      "permission": {
+        "edit": "allow",
+        "bash": "allow"
+      }
+    }
+  }
+}

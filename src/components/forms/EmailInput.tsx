@@ -1,0 +1,36 @@
+import type { InputHTMLAttributes } from 'react'
+import { forwardRef } from 'react'
+import { clsx } from 'clsx'
+
+interface EmailInputProps extends InputHTMLAttributes<HTMLInputElement> {
+  isInvalid?: boolean
+}
+
+const baseStyles =
+  'w-full px-3 py-2.5 text-base border-2 rounded transition-colors duration-150 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-cap-primary font-base leading-normal'
+
+const validStyles = 'border-slate-300 bg-white text-slate-900 placeholder-slate-500 hover:border-slate-400'
+
+const invalidStyles =
+  'border-status-error bg-red-50 text-slate-900 placeholder-slate-500 focus-visible:ring-status-error'
+
+export const EmailInput = forwardRef<HTMLInputElement, EmailInputProps>(
+  ({ isInvalid = false, className, ...props }, ref) => {
+    return (
+      <input
+        ref={ref}
+        type="email"
+        inputMode="email"
+        autoComplete="email"
+        className={clsx(
+          baseStyles,
+          isInvalid ? invalidStyles : validStyles,
+          className
+        )}
+        {...props}
+      />
+    )
+  }
+)
+
+EmailInput.displayName = 'EmailInput'
