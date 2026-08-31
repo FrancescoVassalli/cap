@@ -32,13 +32,6 @@ export function HowWeHelpPage() {
         </div>
       </section>
 
-      {/* Hero image accent */}
-      <img
-        src="/cchi-help-2.jpg"
-        alt=""
-        className="mt-8 h-40 w-full rounded-2xl border border-cap-secondary/40 object-cover object-center shadow-sm sm:h-64"
-      />
-
       {/* What We Help With */}
       <section
         aria-labelledby="what-we-help-heading"
