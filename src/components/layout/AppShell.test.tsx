@@ -28,9 +28,21 @@ describe('AppShell navigation', () => {
     renderShell()
 
     const content = getContent('en')
-    expect(screen.getByRole('link', { name: content.navigation.logo.alt })).toHaveAttribute(
-      'href',
-      '/how-we-help',
+    const brandLink = screen.getByRole('link', { name: content.navigation.logo.alt })
+    expect(brandLink).toHaveAttribute('href', '/how-we-help')
+    // The logo inside the already-labeled link is decorative (alt=""), so it is
+    // exposed as a presentation role rather than an img role.
+    expect(within(brandLink).getByRole('presentation')).toHaveAttribute('src', '/CCHI_Logo.png')
+  })
+
+  it('renders the branded logo image in the footer', () => {
+    renderShell()
+
+    const content = getContent('en')
+    const footer = screen.getByRole('contentinfo')
+    expect(within(footer).getByRole('img', { name: content.navigation.logo.alt })).toHaveAttribute(
+      'src',
+      '/CCHI_Logo.png',
     )
   })
 

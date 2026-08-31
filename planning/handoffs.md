@@ -56,6 +56,7 @@ Completed work:
 - Added a visible intake progress indicator (segmented steps + “Step X of Y” text) in the multi-step form.
 - Normalized page rhythm with the shared Container (incl. new `xl` width) across /how-we-help, /intake, /intake/:id, and the not-found page.
 - Added route-level scroll restoration and heading focus on route changes so the visitor always knows where they are.
+- Wired in the approved CCHI branding assets: the header `SiteBrand` and footer now render `CCHI_Logo.png` (header logo keeps an accessible full-program-name label with a decorative image; footer logo carries the full name alt), and `index.html` uses `CCHI-logo-favicon.png` with the page title set to "Consumer Assistance Program".
 - Kept accessibility intact: visible focus states, `aria-current="page"`, move-keyboard-first skip link, semantic landmarks, and no color-only progress.
 
 ### 3. Visual / Branding pass

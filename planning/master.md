@@ -123,7 +123,7 @@ Plan aws infrastructure to support this system
 
 ## WIP 
 1. ~~Design System Agent → style foundation wiring (CSS + tokens). Must go first; everything visual depends on it.~~ **DONE** (Tailwind bootstrapped in `src/index.css`, tokens migrated to a CSS-first `@theme` block, v4 utility fixes, dead CSS removed; the four verification commands re-run and green — recorded in `architecture/master.md`).
-2. Navigation Agent → CAP logo + favicon in the shell (parallel-safe with #3, after #1).
+2. ~~Navigation Agent → CAP logo + favicon in the shell (parallel-safe with #3, after #1).~~ **DONE** (real `CCHI_Logo.png` wired into the header `SiteBrand` and footer, and `CCHI-logo-favicon.png` set as the favicon with the page title updated — recorded in `architecture/master.md`.)
 3. Informational Pages Agent → CAP hero + team imagery on /how-we-help (parallel with #2, after #1).
 4. Visual smoke check (mobile/desktop) → demo. (The four verification commands have been re-run and are green; a browser-based visual check still needs to be done.)
 5. Then back to the already-planned sequence: Integration / QA Agent, then the Accessibility auditor (WCAG 2.2 AA) — the Security/Release auditors remain later, outside the demo scope.
