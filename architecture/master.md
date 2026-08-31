@@ -98,6 +98,17 @@ For documented implementation drift against the original plan, see [./implementa
 - Submission error states are discriminated (`error` vs. `networkError` vs. `sessionExpired`) so the UI maps each to the correct content copy without exposing exceptions; retry resets submission state via the hook.
 - Unit tests (`src/services/zipService.test.ts`, `submissionService.test.ts`, `documentUploadService.test.ts`) cover data access, unknown/blank/malformed ZIPs, error discrimination, idempotency header, presigned-URL flow, and storage-key safety (never using the original filename as a security boundary).
 
+### EveryAction data transformation
+- Added a pure mapper module (`src/services/everyActionMapper.ts`) that owns every EveryAction field name, numeric id, and request-metadata constant so the URL-encoding/field-name concerns live in one testable place rather than leaking into the UI or the generic API adapter.
+  - `toEveryActionBody(payload, meta, config?)` maps the application `SubmissionPayload` to the flat EveryAction field map (`FirstName`, `LastName`, `PreferredLanguages`, `EmailAddress`, `AddressLine1`, `City`, `PostalCode`, and the split `HomePhoneCountryCode` / `HomePhoneInternationalDialingPrefix` / `HomePhone`), plus request metadata (`FormSessionId`, `ClientSubmissionId`, `BrowserName`, `DeviceType`, `XFromApp`, `ActionTagBaseUrl`, `FormVersion`, `type`).
+  - `buildUrlEncoded(body)` produces the `application/x-www-form-urlencoded; charset=UTF-8` body, percent-encoding special characters via `URLSearchParams`.
+  - A `DEFAULT_EVERY_ACTION_CONFIG` seam (mirroring the `services` DI boundary) holds the numeric language ids (`en` -> `62`, `es` -> `15` per the approved mapping) and defaults for `type`, `XFromApp`, `ActionTagBaseUrl`, and `FormVersion`, swappable without code changes.
+  - `detectBrowserName` / `detectDeviceType` (pure, UA-string based) and `buildEveryActionMeta` (derives non-sensitive session/client submission ids client-side, with hardcoded fallbacks for non-browser environments).
+  - Optional data is handled correctly: a skipped ZIP omits `PostalCode`, an omitted phone omits the `HomePhone*` group, and documents are never transmitted as bytes (they are uploaded separately via `useDocumentUpload`).
+- `ApiSubmissionService` now consumes the mapper: it builds the EveryAction body and POSTs it URL-encoded (instead of raw JSON) while keeping the `Idempotency-Key` header, network/session/server-field error discrimination, and no-raw-exception guarantees. The mock and email adapters are untouched.
+- Added a thin `useEveryActionSubmission` hook (mirroring `useIntakeSubmission`) that composes the mapper/payload assembly with the existing `SubmissionService` boundary, so `IntakeForm` calls a single clean `submit(values)` and never sees EveryAction specifics. It preserves the idle/loading/success/error lifecycle and duplicate-click prevention.
+- Unit tests (`src/services/everyActionMapper.test.ts`, `src/hooks/useEveryActionSubmission.test.ts`) and new `ApiSubmissionService` assertions cover every mapped field, optional ZIP/phone skip, language-id mapping through the config seam, URL-encoding of special characters, session/client/browser/device metadata, the hook happy path + failures + duplicate guard, and the URL-encoded request body.
+
 ## Remaining work
 
 The service layer, app shell, intake flow, and visual/branding pass are implemented and green. Remaining items are final QA and release-readiness:
@@ -148,6 +159,10 @@ The application is intentionally designed as a static, mobile-first frontend pro
 - [../src/hooks/useZipLookup.ts](../src/hooks/useZipLookup.ts)
 - [../src/hooks/useIntakeSubmission.ts](../src/hooks/useIntakeSubmission.ts)
 - [../src/hooks/useDocumentUpload.ts](../src/hooks/useDocumentUpload.ts)
+- [../src/hooks/useEveryActionSubmission.ts](../src/hooks/useEveryActionSubmission.ts)
+- [../src/hooks/useEveryActionSubmission.test.ts](../src/hooks/useEveryActionSubmission.test.ts)
+- [../src/services/everyActionMapper.ts](../src/services/everyActionMapper.ts)
+- [../src/services/everyActionMapper.test.ts](../src/services/everyActionMapper.test.ts)
 - [../src/content/index.ts](../src/content/index.ts)
 - [../src/content/types.ts](../src/content/types.ts)
 - [../src/content/en.ts](../src/content/en.ts)
