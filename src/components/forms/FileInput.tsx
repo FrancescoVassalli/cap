@@ -8,7 +8,7 @@ interface FileInputProps extends InputHTMLAttributes<HTMLInputElement> {
 }
 
 const baseStyles =
-  'block w-full text-sm text-slate-600 file:mr-4 file:px-4 file:py-2.5 file:rounded file:border-0 file:text-sm file:font-medium file:bg-cap-primary file:text-white hover:file:bg-opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-cap-primary'
+  'block w-full text-sm text-slate-600 file:mr-4 file:px-4 file:py-2.5 file:rounded file:border-0 file:text-sm file:font-medium file:bg-cap-primary file:text-white hover:file:bg-cap-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-cap-primary'
 
 const validStyles = 'file:cursor-pointer'
 

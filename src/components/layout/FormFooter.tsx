@@ -46,7 +46,7 @@ export function FormFooter({
           onClick={onContinue}
           disabled={isLoading || isDisabled}
           className={clsx(
-            'px-6 py-3 min-h-touch min-w-touch bg-cap-primary text-white rounded font-medium hover:bg-opacity-90 transition-colors duration-150 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-cap-primary',
+            'px-6 py-3 min-h-touch min-w-touch bg-cap-primary text-white rounded font-medium hover:bg-cap-primary/90 transition-colors duration-150 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-cap-primary',
             isLoading && 'flex items-center justify-center gap-2'
           )}
         >

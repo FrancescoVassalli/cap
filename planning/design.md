@@ -18,7 +18,7 @@ import { Container, FormFooter } from '@/components/layout'
 
 ### Colors
 
-**Brand Colors** (`tailwind.config.ts`):
+**Brand Colors** (defined in the CSS-first `@theme` block of `src/index.css`):
 - **Primary**: `#01599A` (headers, buttons, links, active states)
 - **Secondary**: `#7AABDB` (backgrounds, secondary actions, accents)
 - **Highlight**: `#FEC524` (calls-to-action, attention areas)

@@ -23,6 +23,17 @@ For documented implementation drift against the original plan, see [./implementa
 - Accessible patterns for inputs, errors, hints, and form feedback
 - Shared layout-building blocks such as containers, card surfaces, and app shell framing
 
+### CSS / Tailwind foundation
+- Bootstrapped Tailwind by adding `@import url(...)` + `@import "tailwindcss";` as the first lines of `src/index.css`. Previously the Tailwind engine was never invoked — the single global stylesheet had no Tailwind directive, so the compiled production CSS was only ~1 KB of hand-written rules with **no** generated utilities, Preflight reset, or theme output (the app shipped unstyled; tests passed because Vitest asserts behavior, not styles).
+- Migrated the design tokens from the deprecated JS `tailwind.config.ts` to Tailwind v4's CSS-first `@theme` block in `src/index.css` (and removed the now-redundant JS config). Every token becomes a real utility and stays in sync with the brand/semantic plan: `--color-cap-{primary,secondary,highlight}`, `--color-status-{error,success,focus}`, the semantic layer (`--color-{text,muted,border,background,surface}`), `--font-sans` (Inter), `--spacing-safe`, and `--min-height/width-touch` (44px).
+- Loaded the Inter typeface (Google Fonts) and remapped `--font-sans` so the intended font actually renders instead of silently falling back to system-ui.
+- Fixed Tailwind v4-incompatible or invalid utilities across the components:
+  - Replaced the removed v3 `bg-opacity-*` / `file:bg-opacity-*` opacity utilities with the v4 color-mix syntax (`hover:bg-cap-primary/90`, `active:bg-cap-primary/90`, `hover:file:bg-cap-primary/90`) in `Button`, `FormFooter`, and `FileInput`.
+  - Removed the invalid `font-base` class from all six input/select/textarea primitives (`TextInput`, `EmailInput`, `PhoneInput`, `ZipInput`, `Select`, `Textarea`).
+  - Corrected `resize-vertical` → `resize-y` in `Textarea`.
+- Removed the dead Vite scaffold `src/App.css` (leftover styles referencing nonexistent variables; never imported).
+- Verification: `npm run build` now emits a ~30 KB production CSS bundle (up from ~1 KB) containing generated utilities (`bg-cap-primary`, `min-h-touch`, `focus-visible:ring-cap-primary`, `resize-y`), the Inter `--font-sans` variable, and the color-mix `/90` opacity output. `npm run test` (10 files / 58 tests), `npm run lint`, `npm run typecheck`, and `npm run build` all pass.
+
 ### Content and localization layer
 - Typed English and Spanish content modules (src/content/types.ts, en.ts, es.ts, index.ts)
 - Centralized copy for navigation, informational pages, intake form steps, submission states, and legal notices

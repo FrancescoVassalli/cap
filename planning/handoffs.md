@@ -11,6 +11,7 @@ Recommendation: the next (and final) implementation wave is the Integration / QA
 ## Current implementation status
 Verified as of 2026-08-30:
 - Foundation is complete and stable.
+- **CSS / Tailwind foundation is complete**: Tailwind is bootstrapped in `src/index.css` and now actually generates utilities, Preflight, and theme output (production CSS grew from ~1 KB to ~30 KB); tokens were migrated to the CSS-first `@theme` block (brand, semantic, touch targets, Inter font); v4-incompatible/typo utility classes were fixed; dead Vite scaffold CSS was removed. Details in `architecture/master.md`.
 - Design system is complete and working.
 - Content + localization is complete and consumed by the app.
 - /how-we-help and /intake are implemented and tested.

@@ -16,11 +16,11 @@ const baseStyles =
 
 const variantStyles: Record<ButtonVariant, string> = {
   primary:
-    'bg-cap-primary text-white hover:bg-opacity-90 active:bg-opacity-100 focus-visible:ring-cap-primary',
+    'bg-cap-primary text-white hover:bg-cap-primary/90 active:bg-cap-primary focus-visible:ring-cap-primary',
   secondary:
-    'bg-cap-secondary text-white hover:bg-opacity-90 active:bg-opacity-100 focus-visible:ring-cap-secondary',
+    'bg-cap-secondary text-white hover:bg-cap-secondary/90 active:bg-cap-secondary focus-visible:ring-cap-secondary',
   outline:
-    'border-2 border-cap-primary text-cap-primary hover:bg-cap-primary hover:text-white active:bg-opacity-90 focus-visible:ring-cap-primary',
+    'border-2 border-cap-primary text-cap-primary hover:bg-cap-primary hover:text-white active:bg-cap-primary/90 focus-visible:ring-cap-primary',
 }
 
 const sizeStyles: Record<ButtonSize, string> = {
