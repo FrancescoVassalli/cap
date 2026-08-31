@@ -18,6 +18,7 @@ Verified as of 2026-08-30:
 - The app shell, header/footer, and route-level navigation have been refined into a calm, mobile-first CAP experience (Navigation Agent).
 - The service layer is finalized behind real adapters and routed through dedicated hooks (Services Agent).
 - The project passes: `npm run test`, `npm run build`, `npm run lint`, and `npm run typecheck`.
+- Autofill behavior is verified across every intake field: each contact/ZIP input carries the correct browser `autocomplete` token (given-name, family-name, email, tel, street-address, address-line2, address-level2, address-level1, postal-code), and entering a known ZIP autofills city and state (still editable), including a re-autofill pass after navigating back and changing the ZIP. Locked in by `src/components/intake/IntakeAutofill.test.tsx`.
 
 ## Verified implementation reality
 The repo is materially ahead of the original planning baseline:
