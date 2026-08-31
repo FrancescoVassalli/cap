@@ -35,6 +35,37 @@ export type Services = {
   documentUpload: DocumentUploadService
 }
 
+export type EnvLike = Record<string, unknown>
+
+/**
+ * Resolves the runtime adapter selection from Vite environment variables.
+ * The static prototype remains the default; `VITE_CAP_SUBMISSION_MODE` =
+ * `api`, `VITE_CAP_UPLOAD_MODE` = `s3`, and `VITE_CAP_API_BASE_URL` select the
+ * real backend without changing the form layer or the adapter contracts.
+ */
+export function resolveServiceSelectionFromEnv(env: EnvLike = {}): ServiceSelection {
+  const submissionMode = env['VITE_CAP_SUBMISSION_MODE']
+  const uploadMode = env['VITE_CAP_UPLOAD_MODE']
+  const baseUrl = env['VITE_CAP_API_BASE_URL']
+
+  const production: ServiceSelection['production'] = {}
+  let hasProduction = false
+
+  if (submissionMode === 'api' || submissionMode === 'email') {
+    production.submission = submissionMode
+    hasProduction = true
+  }
+  if (uploadMode === 's3') {
+    production.documentUpload = 's3'
+    hasProduction = true
+  }
+  if (typeof baseUrl === 'string' && baseUrl.length > 0) {
+    production.baseUrl = baseUrl
+  }
+
+  return hasProduction ? { production } : {}
+}
+
 function buildServices(selection: ServiceSelection = {}): Services {
   const prod = selection.production
   // Static-prototype modes ('mock' | 'local') both map to the in-memory
@@ -55,10 +86,14 @@ function buildServices(selection: ServiceSelection = {}): Services {
 }
 
 /**
- * Default service composition for the running app. Tests can build alternate
- * compositions with `buildServices`.
+ * Default service composition for the running app. Mode selection is driven by
+ * `VITE_CAP_*` environment variables and falls back to the static prototype
+ * (mock submission, local UI-only document upload) when no backend is
+ * configured. Tests can build alternate compositions with `buildServices`.
  */
-export const services: Services = buildServices()
+export const services: Services = buildServices(
+  resolveServiceSelectionFromEnv(import.meta.env satisfies EnvLike),
+)
 
 /**
  * Composes a set of services from an explicit selection. Useful for tests and
