@@ -104,6 +104,48 @@ describe('ApiSubmissionService', () => {
     }
   })
 
+  it('posts a URL-encoded EveryAction body rather than raw JSON', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      status: 200,
+      ok: true,
+      json: async () => ({ referenceId: 'CAP-REF' }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      const service = new ApiSubmissionService('https://cap.example')
+      await service.submit(makePayload({ firstName: 'A&very', zipCode: '80203' }))
+      const [, init] = fetchMock.mock.calls[0]
+      expect((init as RequestInit).headers).toMatchObject({
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+      })
+      const body = (init as RequestInit).body as string
+      expect(body).toContain('FirstName=A%26very')
+      expect(body).toContain('PostalCode=80203')
+      expect(body).toContain('PreferredLanguages=62')
+      expect(body).toContain('EmailAddress=avery%40example.com')
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('omits optional ZIP and phone from the EveryAction body when skipped', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      status: 200,
+      ok: true,
+      json: async () => ({ referenceId: 'CAP-REF' }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      const service = new ApiSubmissionService('https://cap.example')
+      await service.submit(makePayload({ zipCode: '', phone: '' }))
+      const body = (fetchMock.mock.calls[0][1] as RequestInit).body as string
+      expect(body).not.toContain('PostalCode=')
+      expect(body).not.toContain('HomePhone=')
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('maps a network failure to a networkError', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
     try {

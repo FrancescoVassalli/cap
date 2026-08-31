@@ -1,4 +1,5 @@
 import type { IntakeDocument, IntakeSubmissionResult, SubmissionErrorKind } from '@/types/index'
+import { buildEveryActionMeta, buildUrlEncoded, toEveryActionBody } from './everyActionMapper'
 
 /**
  * The data required to create an intake submission.
@@ -111,9 +112,11 @@ export class EmailSubmissionService implements SubmissionService {
 }
 
 /**
- * Production-shaped adapter that maps the application payload to a future
- * backend / CRM contract. It is intentionally not implemented for the static
- * prototype; it establishes the request/response shape and idempotency behavior
+ * Production-shaped adapter that maps the application payload to the EveryAction
+ * endpoint contract. It builds the flat, URL-encoded body through the pure
+ * `everyActionMapper` (which owns every field name, language id, and request
+ * metadata) so those concerns stay out of the UI and this adapter only handles
+ * transport. It establishes the request/response shape and idempotency behavior
  * (Intake-ID header) so the UI does not need to change when the backend lands.
  *
  * Configuration (base URL) is read at construction and never shipped as a
@@ -134,15 +137,18 @@ export class ApiSubmissionService implements SubmissionService {
       )
     }
 
+    const meta = buildEveryActionMeta({}, typeof navigator !== 'undefined' ? navigator.userAgent : undefined)
+    const body = buildUrlEncoded(toEveryActionBody(payload, meta))
+
     let response: Response
     try {
       response = await fetch(`${this.baseUrl}/intakes`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
           'Idempotency-Key': payload.intakeId,
         },
-        body: JSON.stringify(payload),
+        body,
       })
     } catch {
       throw new SubmissionError('networkError', 'Could not connect to the service.')

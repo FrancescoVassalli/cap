@@ -5,7 +5,7 @@ import { Container } from '@/components/layout'
 import { IntakeProgress } from '@/components/navigation'
 import { getContent } from '@/content'
 import { INTAKE_STEP_COUNT, useIntakeNavigation } from '@/hooks/useIntakeNavigation'
-import { useIntakeSubmission } from '@/hooks/useIntakeSubmission'
+import { useEveryActionSubmission } from '@/hooks/useEveryActionSubmission'
 import { useZipLookup } from '@/hooks/useZipLookup'
 import type { IntakeDocument, IntakeFormValues } from '@/types/index'
 import { createIntakeSchema } from '@/validation/intakeSchema'
@@ -43,7 +43,7 @@ interface IntakeFormProps {
 export function IntakeForm({ intakeId }: IntakeFormProps) {
   const { currentStep, goNext, goBack, canGoBack } = useIntakeNavigation(TOTAL_STEPS)
   const { lookup } = useZipLookup()
-  const submission = useIntakeSubmission()
+  const submission = useEveryActionSubmission()
   const { status: submissionStatus, errorKind, referenceId } = submission
   const [submittedLanguage, setSubmittedLanguage] = useState<'en' | 'es'>('en')
   const [zipNotice, setZipNotice] = useState('')
@@ -61,20 +61,7 @@ export function IntakeForm({ intakeId }: IntakeFormProps) {
 
   const handleSubmission = async (values: IntakeFormValues) => {
     setSubmittedLanguage(values.language)
-    await submission.submit({
-      intakeId,
-      zipCode: values.zipCode,
-      language: values.language,
-      firstName: values.firstName,
-      lastName: values.lastName,
-      email: values.email,
-      phone: values.phone,
-      streetAddress: values.streetAddress,
-      apartment: values.apartment,
-      city: values.city,
-      state: values.state,
-      documents: values.documents,
-    })
+    await submission.submit({ intakeId, ...values })
   }
 
   const handleRetry = () => {
