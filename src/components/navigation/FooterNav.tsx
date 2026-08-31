@@ -26,7 +26,7 @@ export function FooterNav({ content }: FooterNavProps) {
             alt={navigation.logo.alt}
             className="h-10 w-auto"
           />
-          <p className="mt-3 text-sm text-slate-600">{navigation.brand}</p>
+          <p className="mt-3 text-sm font-medium text-slate-800">{navigation.brand}</p>
         </div>
 
         <nav
@@ -37,7 +37,7 @@ export function FooterNav({ content }: FooterNavProps) {
             <Link
               key={item.key}
               to={item.to}
-              className="inline-flex min-h-touch min-w-touch items-center rounded-md px-2 py-1 text-slate-600 underline-offset-4 transition-colors hover:text-sky-900 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-cap-primary focus-visible:ring-offset-2"
+              className="inline-flex min-h-touch min-w-touch items-center rounded-md px-2 py-1 font-medium text-slate-800 underline-offset-4 transition-colors hover:bg-cap-primary hover:text-white hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-cap-primary focus-visible:ring-offset-2"
             >
               {navigation.mainNav[item.key]}
             </Link>
@@ -45,7 +45,7 @@ export function FooterNav({ content }: FooterNavProps) {
         </nav>
       </div>
 
-      <div className="space-y-3 border-t border-slate-200 pt-6 text-sm text-slate-600">
+      <div className="space-y-3 border-t border-cap-primary/30 pt-6 text-sm text-slate-800">
         <p>{legal.disclaimer.content}</p>
         <p>{navigation.footer.copyright}</p>
       </div>

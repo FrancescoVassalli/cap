@@ -166,13 +166,6 @@ export function IntakeForm({ intakeId }: IntakeFormProps) {
           }
         }
 
-        const handleZipSkip = () => {
-          setFieldValue('zipCode', '')
-          setFieldValue('city', '')
-          setFieldValue('state', '')
-          setZipNotice('')
-        }
-
         const handleAddDocuments = (newDocuments: IntakeDocument[]) => {
           setFieldValue('documents', [...values.documents, ...newDocuments])
         }
@@ -235,23 +228,27 @@ export function IntakeForm({ intakeId }: IntakeFormProps) {
 
         return (
           <Container size="md" className="py-8 sm:py-10">
-            <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-              <IntakeProgress
-                current={stepMeta.stepNumber}
-                total={totalSteps}
-                progressText={content.intakeForm.navigation.progressLabel(stepMeta.stepNumber, totalSteps)}
-                ariaLabel={content.intakeForm.navigation.progressAriaLabel}
-              />
-              <h1
-                ref={stepHeadingRef}
-                tabIndex={-1}
-                className="mt-3 text-2xl font-bold text-cap-primary focus:outline-none focus:ring-2 focus:ring-cap-primary focus:ring-offset-2"
-              >
-                {stepMeta.label}
-              </h1>
+            <div className="mb-6 overflow-hidden rounded-2xl border border-cap-secondary/40 bg-white shadow-sm">
+              <div className="border-b border-cap-secondary/40 bg-cap-secondary-50 px-4 py-3 sm:px-5">
+                <IntakeProgress
+                  current={stepMeta.stepNumber}
+                  total={totalSteps}
+                  progressText={content.intakeForm.navigation.progressLabel(stepMeta.stepNumber, totalSteps)}
+                  ariaLabel={content.intakeForm.navigation.progressAriaLabel}
+                />
+              </div>
+              <div className="px-4 pb-4 sm:px-5">
+                <h1
+                  ref={stepHeadingRef}
+                  tabIndex={-1}
+                  className="mt-3 text-2xl font-bold text-cap-primary focus:outline-none focus:ring-2 focus:ring-cap-primary focus:ring-offset-2"
+                >
+                  {stepMeta.label}
+                </h1>
+              </div>
             </div>
 
-            <Form className="space-y-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-8">
+            <Form className="space-y-6 rounded-2xl border border-cap-secondary/40 bg-white p-5 shadow-sm sm:p-8">
               {showErrorSummary && (
                 <ErrorSummary
                   heading={content.intakeForm.errors.errorSummaryHeading}
@@ -272,13 +269,13 @@ export function IntakeForm({ intakeId }: IntakeFormProps) {
                   zipNotice={zipNotice}
                   onZipChange={handleZipChange}
                   onBlur={handleBlur}
-                  onSkip={handleZipSkip}
                 />
               )}
 
               {currentStep === 1 && (
                 <LanguageStep
                   content={content}
+                  value={values.language}
                   errors={stepErrors}
                   touched={touched}
                   onChange={handleChange}

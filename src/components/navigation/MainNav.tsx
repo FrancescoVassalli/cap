@@ -29,8 +29,8 @@ export function MainNav({ ariaLabel, labels }: MainNavProps) {
             clsx(
               'inline-flex min-h-touch min-w-touch items-center justify-center rounded-md px-3 py-2 text-sm font-medium transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-cap-primary focus-visible:ring-offset-2',
               isActive
-                ? 'bg-sky-100 text-sky-900'
-                : 'text-slate-700 hover:bg-slate-100 hover:text-sky-900',
+                ? 'bg-cap-primary text-white shadow-sm'
+                : 'text-slate-700 hover:bg-cap-secondary-50 hover:text-cap-primary border-b-2 border-transparent hover:border-cap-highlight',
             )
           }
         >

@@ -115,7 +115,6 @@ export interface ZipStepContent {
   label: string;
   hint: string;
   placeholder: string;
-  skipLabel: string;
   notFoundMessage: string;
 }
 

@@ -50,6 +50,22 @@ describe('IntakeForm', () => {
     })
   })
 
+  describe('language step', () => {
+    it('defaults the language selection to English', async () => {
+      const user = userEvent.setup()
+      renderIntakeForm()
+
+      await user.type(screen.getByLabelText(/zip code/i), '80203')
+      await user.click(screen.getByRole('button', { name: /continue/i }))
+
+      const englishRadio = screen.getByRole('radio', { name: /english/i })
+      const spanishRadio = screen.getByRole('radio', { name: /spanish/i })
+
+      expect(englishRadio).toBeChecked()
+      expect(spanishRadio).not.toBeChecked()
+    })
+  })
+
   describe('ZIP step', () => {
     it('autofills city and state from a known ZIP while keeping them editable', async () => {
       const user = userEvent.setup()
@@ -67,12 +83,15 @@ describe('IntakeForm', () => {
       expect(city).toHaveValue('Boulder')
     })
 
-    it('can skip the ZIP step', async () => {
+    it('lets the user continue with the ZIP left blank', async () => {
       const user = userEvent.setup()
       renderIntakeForm()
 
-      await user.type(screen.getByLabelText(/zip code/i), '80203')
-      await user.click(screen.getByRole('button', { name: /skip this step/i }))
+      // No "Skip this step" control exists; leaving the ZIP empty and
+      // continuing is the supported way to proceed.
+      expect(
+        screen.queryByRole('button', { name: /skip this step/i }),
+      ).not.toBeInTheDocument()
 
       expect(screen.getByLabelText(/zip code/i)).toHaveValue('')
 

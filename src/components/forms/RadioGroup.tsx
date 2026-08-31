@@ -7,9 +7,11 @@ interface RadioOption {
   label: string
 }
 
-interface RadioGroupProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'type' | 'name'> {
+interface RadioGroupProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'type' | 'name' | 'value' | 'checked'> {
   name: string
   options: RadioOption[]
+  /** The currently selected option value. Determines which radio is checked. */
+  value?: string
   isInvalid?: boolean
   orientation?: 'horizontal' | 'vertical'
 }
@@ -25,7 +27,7 @@ const invalidStyles =
 
 export const RadioGroup = forwardRef<HTMLInputElement, RadioGroupProps>(
   (
-    { name, options, isInvalid = false, orientation = 'vertical', className, ...props },
+    { name, options, value, isInvalid = false, orientation = 'vertical', className, ...props },
     ref
   ) => {
     return (
@@ -44,6 +46,7 @@ export const RadioGroup = forwardRef<HTMLInputElement, RadioGroupProps>(
               type="radio"
               name={name}
               value={option.value}
+              checked={value === option.value}
               className={clsx(
                 radioBaseStyles,
                 isInvalid ? invalidStyles : validStyles

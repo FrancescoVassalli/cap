@@ -13,10 +13,9 @@ interface ZipStepProps {
   zipNotice: string
   onZipChange: (event: ChangeEvent<HTMLInputElement>) => void
   onBlur: (event: FocusEvent<HTMLInputElement>) => void
-  onSkip: () => void
 }
 
-export function ZipStep({ content, values, errors, touched, zipNotice, onZipChange, onBlur, onSkip }: ZipStepProps) {
+export function ZipStep({ content, values, errors, touched, zipNotice, onZipChange, onBlur }: ZipStepProps) {
   const zipError = touched.zipCode && errors.zipCode ? errors.zipCode : undefined
 
   return (
@@ -46,14 +45,6 @@ export function ZipStep({ content, values, errors, touched, zipNotice, onZipChan
           {zipNotice}
         </div>
       )}
-
-      <button
-        type="button"
-        className="text-sm font-medium text-cap-primary underline underline-offset-2"
-        onClick={onSkip}
-      >
-        {content.intakeForm.zip.skipLabel}
-      </button>
     </div>
   )
 }

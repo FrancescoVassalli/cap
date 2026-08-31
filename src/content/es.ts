@@ -184,7 +184,6 @@ export const es: AllContent = {
       label: "¿Cuál es el código postal en el que vive?",
       hint: "Lo usaremos para ayudar a llenar su ciudad y estado.",
       placeholder: "80203",
-      skipLabel: "Saltar este paso",
       notFoundMessage:
         "No pudimos encontrar ese código postal. Puede continuar e ingresar su dirección manualmente.",
     },

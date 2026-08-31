@@ -26,7 +26,7 @@ export function FormFooter({
   return (
     <div
       className={clsx(
-        'flex flex-col-reverse sm:flex-row sm:justify-between gap-3 mt-8 pt-6 border-t border-slate-200',
+        'flex flex-col-reverse sm:flex-row sm:justify-between gap-3 mt-8 pt-6 border-t border-cap-secondary/40',
         className
       )}
     >

@@ -64,7 +64,7 @@ export function DocumentsStep({
       <h2 className="text-2xl font-bold text-slate-900">{documentsContent.heading}</h2>
       <p className="text-base text-slate-700">{documentsContent.description}</p>
 
-      <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+      <div className="rounded-xl border border-cap-secondary/40 bg-cap-primary-50/50 p-4">
         <p className="text-sm font-medium text-slate-800">{documentsContent.examples.heading}</p>
         <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-700">
           {documentsContent.examples.items.map((item) => (
@@ -101,11 +101,11 @@ export function DocumentsStep({
       )}
 
       {documents.length > 0 && (
-        <ul className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+        <ul className="space-y-2 rounded-xl border border-cap-secondary/40 bg-cap-primary-50/50 p-3">
           {documents.map((document) => (
             <li
               key={document.id}
-              className="flex items-center justify-between gap-3 rounded border border-slate-200 bg-white px-3 py-2"
+              className="flex items-center justify-between gap-3 rounded border border-cap-secondary/40 bg-white px-3 py-2"
             >
               <div>
                 <p className="font-medium text-slate-900">{document.name}</p>

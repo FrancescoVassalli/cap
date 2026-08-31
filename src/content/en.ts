@@ -182,7 +182,6 @@ export const en: AllContent = {
       label: "What ZIP code do you live in?",
       hint: "We'll use this to help fill in your city and state.",
       placeholder: "80203",
-      skipLabel: "Skip this step",
       notFoundMessage:
         "We couldn't find that ZIP code. You can continue and enter your address manually.",
     },

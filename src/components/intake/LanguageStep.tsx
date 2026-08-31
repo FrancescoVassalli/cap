@@ -7,13 +7,14 @@ import type { FormikErrors, FormikTouched } from 'formik'
 
 interface LanguageStepProps {
   content: AllContent
+  value: string
   errors: FormikErrors<IntakeFormValues>
   touched: FormikTouched<IntakeFormValues>
   onChange: (event: ChangeEvent<HTMLInputElement>) => void
   onBlur: (event: FocusEvent<HTMLInputElement>) => void
 }
 
-export function LanguageStep({ content, errors, touched, onChange, onBlur }: LanguageStepProps) {
+export function LanguageStep({ content, value, errors, touched, onChange, onBlur }: LanguageStepProps) {
   const languageError = touched.language && errors.language ? errors.language : undefined
 
   return (
@@ -23,6 +24,7 @@ export function LanguageStep({ content, errors, touched, onChange, onBlur }: Lan
       <FormField error={languageError}>
         <RadioGroup
           name="language"
+          value={value}
           onChange={onChange}
           onBlur={onBlur}
           options={[

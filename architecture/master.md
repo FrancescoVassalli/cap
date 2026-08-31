@@ -2,7 +2,7 @@
 
 ## Current status
 
-The CAP frontend has moved past the initial scaffold phase and is now in the downstream implementation phase. The project is no longer primarily about setup and infrastructure; the informational pages and the localized EN/ES intake form flow are implemented (with accessible validation and submission states), the app shell and navigation are polished, and the service layer is finalized behind real adapters and dedicated hooks. The remaining work is final end-to-end QA/validation of the assembled application.
+The CAP frontend has moved past the initial scaffold phase and is now in the downstream implementation phase. The project is no longer primarily about setup and infrastructure; the informational pages and the localized EN/ES intake form flow are implemented (with accessible validation and submission states), the app shell and navigation are polished, the service layer is finalized behind real adapters and dedicated hooks, and the visual / branding pass has repainted the app onto the CAP/CCHI palette. The remaining work is final end-to-end QA/validation of the assembled application.
 
 The most current implementation status is captured in [../planning/handoffs.md](../planning/handoffs.md), which identifies the project as being in the product-facing feature stage rather than the startup phase.
 
@@ -59,11 +59,11 @@ For documented implementation drift against the original plan, see [./implementa
 - Componentized step content under src/components/intake/ (ZipStep, LanguageStep, ContactStep, DocumentsStep, IntakeForm, SubmissionSuccess, SubmissionError, ErrorSummary), with navigation encapsulated in src/hooks/useIntakeNavigation.ts (currentStep/goNext/goBack/canGoBack)
 - Step validation is authoritative for the current step: stale whole-form Formik errors no longer block progression, and field errors refresh as the user edits
 - Accessible error summary: on a failed Continue attempt the error summary is shown (content-driven heading) and keyboard focus moves to it, but not re-stolen on every keystroke/remount; invalid fields carry aria-invalid and errors are associated via FormField (WCAG 2.2 AA)
-- ZIP step supports optional lookup with frontend autofill of city/state (still editable), a skip flow, and an unknown-ZIP notice, all via the zip service contract
+- ZIP step supports optional lookup with frontend autofill of city/state (still editable) and an unknown-ZIP notice, all via the zip service contract; there is no dedicated "Skip this step" control — leaving the ZIP blank and continuing is the supported skip path (the Continue flow clears ZIP/city/state via the button handler)
 - Document validation enforces per-file 10 MB, total 50 MB, allowed types (PDF/JPG/JPEG/PNG), and duplicate-file detection with content-driven messages, and shows selected files with per-file Remove
 - Submission flow has idle/loading/success/error states with duplicate-click prevention (submit disabled while loading) and renders the reference number on the content-driven success screen; failure renders content-driven error/retry states
 - No-persistence requirement preserved: no PHI or consumer data written to browser storage, URL parameters, analytics, or client logs (verified by test)
-- Focused regression suite in src/components/intake/IntakeForm.test.tsx covers step navigation (Back/Continue), progress label, ZIP autofill/skip/unknown, required-field and email validation, content-driven success screen with reference number, and no-persistence
+- Focused regression suite in src/components/intake/IntakeForm.test.tsx covers step navigation (Back/Continue), progress label, ZIP autofill/blank-continue/unknown, required-field and email validation, content-driven success screen with reference number, and no-persistence
 - The old `IntakeStartButton` export was removed from IntakePage.tsx; the "Start a New Request" CTA now lives in IntakeLandingPage.tsx
 - Known: the `npm run typecheck` script (tsc --noEmit on the solution tsconfig) passes trivially; the production `npm run build` (tsc -b) is the stricter check and is green
 
@@ -77,6 +77,18 @@ For documented implementation drift against the original plan, see [./implementa
 - Accessibility preserved/improved: visible focus rings, 44px touch targets in the header, semantic landmarks, no color-only progress indication, and mobile-first reflow (the two-item main nav remains visible without a hidden menu).
 - New regression tests cover the shell (skip link, brand home link, active-route nav, footer disclaimer/copyright) and the intake progress component.
 
+### Visual / branding pass (Design System Agent)
+- Added light brand-tint tokens to `src/index.css` (`--color-cap-primary-50`, `--color-cap-primary-100`, `--color-cap-secondary-50`), derived from the brand hexes, and warmed the semantic canvas (`--color-background`); existing `status-*`, `touch`, and `font` tokens were left unchanged.
+- Repainted `AppShell` onto the warm brand canvas (`bg-cap-primary-50`), added a thin primary→secondary→highlight gradient brand bar across the top, and switched header/footer chrome to `border-cap-secondary/40` accents. The footer is now a brand-toned secondary band that swaps the gray chrome for the blue brand color while keeping dark text for contrast.
+- Built a primary→secondary blue-gradient hero on both `/how-we-help` and `/intake` with white text, a highlight (`#fec524`) eyebrow pill, and a highlight CTA (never white-on-yellow). `/how-we-help` gained a real CAP hero image (`public/cchi-help-2.jpg`).
+- Replaced the flat gray card stacking with branded surfaces: warm header rows (`bg-cap-secondary-50` + `border-cap-secondary/40`), service tiles with a `border-l-4 border-cap-primary` accent, "How CAP Works" step tiles with highlight number chips, and a highlight/expectations color-band callout block.
+- Added a `highlight` variant to `Button.tsx` (`bg-cap-highlight text-cap-primary` with a subtle hover lift) used for the get-help/start CTAs, and normalized form-control borders to a secondary accent (`border-cap-secondary/70`, focus to primary) across the input/select/textarea primitives and `Card`.
+- Branded the main nav active state (`bg-cap-primary` + white text) and inactive hover underline, and themed the intake form progress + step-card surfaces (completed segments cap-primary, current segment cap-secondary, `IntakeProgress` labels retained so color is never the only signal).
+- Added a team/trust section on `/how-we-help` with the real CAP team headshots pulled into `public/` (`team-{stephanie,madi,melissa,monica,alejandra}.*`) as decorative-but-alt-labeled figures, plus a real hero photo. No new backend or business logic; all changes are presentational.
+- Made `RadioGroup`/`LanguageStep` explicitly controlled so the selected language radio is actually checked (a pre-existing correctness improvement folded into this pass); the language step defaults to English with a regression test.
+- Verification: `npm run test` (10 files / 60 tests), `npm run lint`, `npm run build`, and `npm run typecheck` are green; the production CSS grew to ~36 KB and contains the new brand-tint utilities and gradient/highlight styles. A Playwright visual smoke check confirmed the warm canvas, hero gradient + white text, highlight CTA (yellow bg / primary text), secondary footer, and no horizontal overflow at 390px mobile width on both informational pages.
+- Contrast guardrails held: dark text on highlight, white on primary, and dark text on the secondary footer all meet target contrast; focus-visible rings and 44px touch targets were preserved on every repainted surface.
+
 ### Service layer
 - Replaced the in-place mock ZIP adapter with `StaticZipService`, a dataset-driven adapter backed by a real Colorado ZIP dataset (`src/data/zipCodes.json`). It returns the postal locality for known codes and `null` for unknown, blank, or malformed codes, so the intake can show the “We couldn't find that ZIP code” notice and continue without blocking.
 - Defined and implemented multiple submission adapters behind `SubmissionService`: `MockSubmissionService` (in-memory prototype), `EmailSubmissionService` (dev/demo notification that deliberately avoids placing PHI or documents in a `mailto:` URL), and `ApiSubmissionService` (production shape with an `Idempotency-Key`, network/session/server-field error discrimination, and no raw exceptions surfaced).
@@ -88,10 +100,11 @@ For documented implementation drift against the original plan, see [./implementa
 
 ## Remaining work
 
-The service layer, app shell, and intake flow are implemented and green. Remaining items are final QA and release-readiness:
+The service layer, app shell, intake flow, and visual/branding pass are implemented and green. Remaining items are final QA and release-readiness:
 
 - Validate the complete end-to-end experience in QA (state flow, step navigation, skip logic, service error/retry states, success handling, accessibility, mobile behavior) before signoff.
 - Exercise the `ApiSubmissionService` and `PresignedS3DocumentUploadService` adapters against a real backend contract once one is available.
+- Run the Accessibility auditor (WCAG 2.2 AA) as the designated sign-off gate; Security/Release auditors remain outside the demo scope per the plan.
 
 ## Architecture direction
 

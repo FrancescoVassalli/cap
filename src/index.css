@@ -13,6 +13,11 @@
   --color-cap-secondary: #7aabdb;
   --color-cap-highlight: #fec524;
 
+  /* Brand tints (light accents derived from the brand hexes) */
+  --color-cap-primary-50: #eef6fc;
+  --color-cap-primary-100: #d9eaf7;
+  --color-cap-secondary-50: #eef4fb;
+
   /* Semantic status */
   --color-status-error: #b91c1c;
   --color-status-success: #166534;
@@ -21,8 +26,8 @@
   /* Semantic layer (decouples UI from raw brand values) */
   --color-text: #0f172a;
   --color-muted: #475569;
-  --color-border: #cbd5e1;
-  --color-background: #f8fafc;
+  --color-border: #cdd6e0;
+  --color-background: #f5f7fa;
   --color-surface: #ffffff;
 
   /* Typography */

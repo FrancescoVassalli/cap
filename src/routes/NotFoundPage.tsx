@@ -9,7 +9,7 @@ export function NotFoundPage() {
 
   return (
     <Container size="sm" className="py-10 sm:py-16">
-      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+      <div className="rounded-2xl border border-cap-secondary/40 bg-white p-6 shadow-sm sm:p-8">
         <h1>{notFound.heading}</h1>
         <p className="mt-3 text-slate-700">{notFound.description}</p>
         <div className="mt-6 flex flex-wrap gap-3">

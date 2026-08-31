@@ -14,8 +14,8 @@ export function Card({
   return (
     <div
       className={clsx(
-        'rounded-lg bg-white p-6',
-        variant === 'default' && 'border border-slate-200',
+        'rounded-2xl bg-white p-6',
+        variant === 'default' && 'border border-cap-secondary/40',
         variant === 'elevated' && 'shadow-md',
         className
       )}

@@ -1,7 +1,7 @@
 import type { ButtonHTMLAttributes, PropsWithChildren } from 'react'
 import { clsx } from 'clsx'
 
-type ButtonVariant = 'primary' | 'secondary' | 'outline'
+type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'highlight'
 type ButtonSize = 'sm' | 'md' | 'lg'
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -12,7 +12,7 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const baseStyles =
-  'font-medium rounded transition-colors duration-150 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-cap-primary disabled:opacity-50 disabled:cursor-not-allowed'
+  'font-medium rounded transition-all duration-150 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-cap-primary disabled:opacity-50 disabled:cursor-not-allowed'
 
 const variantStyles: Record<ButtonVariant, string> = {
   primary:
@@ -21,6 +21,8 @@ const variantStyles: Record<ButtonVariant, string> = {
     'bg-cap-secondary text-white hover:bg-cap-secondary/90 active:bg-cap-secondary focus-visible:ring-cap-secondary',
   outline:
     'border-2 border-cap-primary text-cap-primary hover:bg-cap-primary hover:text-white active:bg-cap-primary/90 focus-visible:ring-cap-primary',
+  highlight:
+    'bg-cap-highlight text-cap-primary shadow-sm hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 focus-visible:ring-cap-primary',
 }
 
 const sizeStyles: Record<ButtonSize, string> = {
