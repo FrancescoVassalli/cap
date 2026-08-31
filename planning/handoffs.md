@@ -58,7 +58,26 @@ Completed work:
 - Added route-level scroll restoration and heading focus on route changes so the visitor always knows where they are.
 - Kept accessibility intact: visible focus states, `aria-current="page"`, move-keyboard-first skip link, semantic landmarks, and no color-only progress.
 
-### 3. Final QA / Integration Agent
+### 3. Visual / Branding pass
+Priority: planned (next implementation wave)
+This is a presentational-only change that follows the color/branding inspiration in `planning/master.md` (primary `#01599a`, secondary `#7aabdb`, highlight `#fec524`) and the character of the reference CAP/CCHI site (hero blue, photography, bold color bands). No business logic, no component API changes, no accessibility-structure changes.
+
+Reason: the app "works" but renders flat and generic — pages are painted almost entirely in neutral slate grays (white/slate-50 cards, thin slate-200 borders, shadow-sm), and the brand colors appear only as tiny accents. The three brand colors are underused (cap-secondary and cap-highlight are effectively absent from the informational pages).
+
+Planned work (in this order):
+1. **Tokens/theme** (`src/index.css`) — add light brand tint tokens (`cap-primary-50/100`, `cap-secondary-50`) and a warm canvas background derived from the brand hexes; keep existing `status-*`, `touch`, and `font` tokens unchanged.
+2. **AppShell** — swap `bg-slate-50` for a warm canvas; add a thin primary→secondary gradient brand bar along the top; use `border-cap-secondary/40` accents on header/footer.
+3. **Hero** (HowWeHelp + IntakeLanding) — primary-blue gradient hero with white text, a highlight `#fec524` underline/eyebrow accent, and a white or highlight CTA pill.
+4. **Cards/sections** — replace flat `white border-slate-200 shadow-sm` stacking with warm cards (`border-cap-secondary/40`, `cap-secondary-50` header rows/accent tops, larger rounding); service/step tiles get `border-l-4 border-cap-primary` or highlight number chips; give one "expectations" block a secondary/highlight band callout.
+5. **Buttons/CTA** (`Button.tsx`) — launch/get-help CTA uses `bg-cap-highlight text-cap-primary` (never white on yellow); add a subtle hover lift while keeping focus rings.
+6. **Header/nav/footer** — stronger brand wordmark/logo, active-route underline in secondary/highlight, and a brand-toned footer (primary-dark or secondary-tint with light text) instead of gray.
+7. **Intake form + progress** (`IntakeProgress`) — completed segments cap-primary, current/active fill cap-secondary, active cap cap-highlight; step cards get highlight step chips. Keep text labels (no color-only meaning).
+8. **Imagery** — add CAP logo into hero/header and team-photo placeholders in a trust section on /how-we-help, pulling real assets from the current site into `public/`.
+9. **Verification** — contrast check (dark text on highlight, white on primary/secondary), then re-run `npm run test`, `npm run build`, `npm run lint`, `npm run typecheck`, plus a browser visual smoke check (mobile + desktop).
+
+Accessibility guardrails (preserved): no color-only meaning (text labels kept), existing focus-visible rings kept on all new backgrounds, 44px touch targets unchanged, semantic structure untouched.
+
+### 4. Final QA / Integration Agent
 Priority: required before sign-off
 Required work:
 - Validate the app as one experience rather than a collection of independent features.
@@ -67,14 +86,15 @@ Required work:
 - Run the final verification pass across the repo before sign-off.
 
 ## Integration recommendation
-Status: functionally complete; one remaining implementation wave (final QA) before sign-off.
+Status: functionally complete; the next implementation wave is the Visual / Branding pass, followed by final QA before sign-off.
 
 Reason:
-- Navigation polish is complete and the service layer is finalized behind real adapters and hook boundaries. The remaining value is an end-to-end validation pass that exercises the assembled application, service error/retry states, skip flows, accessibility, and mobile behavior as one experience.
+- Navigation polish is complete and the service layer is finalized behind real adapters and hook boundaries. The app is functionally complete but renders flat; a presentational Visual / Branding pass will align the look with the brand direction in `planning/master.md`. After that, the remaining value is an end-to-end validation pass that exercises the assembled application, service error/retry states, skip flows, accessibility, and mobile behavior as one experience.
 
 ## Agent boundaries reference
 - Services Agent: ownership of ZIP, submission, and document-upload adapters — completed
 - Navigation Agent: ownership of route shell polish and mobile UX consistency — completed
+- Design System Agent: ownership of the visual/branding pass (tokens, shell, hero, cards, CTA, nav/footer, intake progress, imagery) — planned next
 - Integration / QA Agent: ownership of end-to-end validation and release readiness
 
 ## Verification evidence
@@ -82,10 +102,11 @@ Reason:
 - Result: 9 test files passed, 53 tests passed (including AppShell navigation, intake-progress, and ZIP/submission/document-upload service tests), production build succeeded (`tsc -b` strict), lint was clean, and typecheck succeeded.
 
 ## Working note for the next handoff
-This is a stable prototype with strong feature coverage. Navigation/shell polish and the service layer are complete; the remaining value is the final end-to-end QA pass across the assembled application.
+This is a stable prototype with strong feature coverage. Navigation/shell polish and the service layer are complete. The app is functionally complete but renders flat/generic (neutral slate grays; brand colors underused), so a presentational-only Visual / Branding pass is planned next to follow the color/branding inspiration in `planning/master.md`.
 
 The next agent sequence should be:
-1. Integration / QA Agent (end-to-end validation: routing, skip flows, service error/retry, submission states, accessibility, mobile)
-2. Final accessibility audit under the WCAG 2.2 AA target
+1. Design System Agent — Visual / Branding pass (tokens, shell, hero, cards, CTA, nav/footer, intake progress, imagery + contrast check and full verification)
+2. Integration / QA Agent (end-to-end validation: routing, skip flows, service error/retry, submission states, accessibility, mobile)
+3. Final accessibility audit under the WCAG 2.2 AA target
 
 That sequence keeps the architecture honest and reduces the chance of polishing around mock behavior without a real backend contract.
