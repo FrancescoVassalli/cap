@@ -51,6 +51,20 @@ early and never duplicate the entry. Covered by new backend tests (write on
 submit, no duplicate on replay, no log for invalid input, no consumer data in
 stdout). Suite is now 153/153 green.
 
+**Intake submission now wired to the real API (this round):** the "Submit
+Request" button now actually calls the API. The local dev fixture
+(`.env.local`) previously set only upload mode, so submission fell back to the
+in-memory `MockSubmissionService` and never transmitted. It now sets
+`VITE_CAP_SUBMISSION_MODE=api` (plus the existing `VITE_CAP_UPLOAD_MODE=s3` and
+`VITE_CAP_API_BASE_URL`), so the running Vite app routes the submit button
+through `ApiSubmissionService` → `POST /intakes` on the live backend. Verified
+the exact adapter end-to-end against a running server (returns
+`success:true` with a `CAP-XXXX-XXXX` reference id). Because Vitest also honors
+Vite's `.env.local` by default, the frontend test project now forces
+`VITE_CAP_SUBMISSION_MODE=''` / `VITE_CAP_UPLOAD_MODE=''` in
+`vite.config.ts` (`test.env`), keeping the 153-test suite deterministic against
+the in-memory mocks while the dev app talks to the real API.
+
 **Next steps**
 1. Production deployment of the backend is the remaining external step: provision
    API Gateway/Lambda/CloudFront in front of the same handlers (the S3 bucket
@@ -59,10 +73,7 @@ stdout). Suite is now 153/153 green.
 2. Add Playwright E2E runner to the standard `npm test`/CI path so the presigned
    upload contract stays covered; currently it runs only via the explicit
    `npx playwright test` invocation against a running backend + frontend.
-3. Optional: add `VITE_CAP_SUBMISSION_MODE=api` support behind a separate
-   .env/test seam once existing iteration can accept test isolation, to exercise
-   the full submit → presigned-upload journey from the browser.
-4. Confirm the CORS origin whitelist in production (`CAP_ALLOWED_ORIGINS`) to the
+3. Confirm the CORS origin whitelist in production (`CAP_ALLOWED_ORIGINS`) to the
    exact static-host origin before release.
 
 ## react-native-app — mobile app implementation

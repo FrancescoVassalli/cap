@@ -24,6 +24,15 @@ export default defineConfig({
           setupFiles: './src/test/setup.ts',
           css: true,
           include: ['src/**/*.test.{ts,tsx}'],
+          // Tests stay deterministic against the in-memory mock service even
+          // when a developer has `.env.local` pointing the running dev server
+          // at the live API (`VITE_CAP_SUBMISSION_MODE=api` / upload `s3`).
+          // Vitest honors the Vite `.env.local` file by default, which would
+          // otherwise make `IntakeForm` render time dial the real backend.
+          env: {
+            VITE_CAP_SUBMISSION_MODE: '',
+            VITE_CAP_UPLOAD_MODE: '',
+          },
         },
       },
       {
