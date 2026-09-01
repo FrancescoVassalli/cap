@@ -24,6 +24,6 @@ export type UploadUrlValidation =
  * implementation replaces it with AWS Signature V4 URLs.
  */
 export type UploadUrlPresigner = {
-  createUploadLocation: (input: CreateUploadLocationInput) => UploadLocation
-  verifyUploadUrl: (documentId: string, token: string) => UploadUrlValidation
+  createUploadLocation: (input: CreateUploadLocationInput) => Promise<UploadLocation>
+  verifyUploadUrl: (documentId: string, token: string, intakeId?: string) => UploadUrlValidation
 }

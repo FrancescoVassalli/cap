@@ -2,4 +2,4 @@
 
 The [Project description](./planning/master.md) is what what should be done. Any notes about what has been completed should be confined to the [architecture](./architecture/master.md).
 
-Next steps should always be recorded in the [handoffs](./planning/handoffs.md). Once the step is taken it should be removed from the handoffs. Each time the handoffs are updated add a git commit using [conventional commits](./planning/conventional-commits.md)
+Next steps should always be recorded in the [handoffs](./planning/handoffs.md). Once the step is taken it should be removed from the handoffs. Each time the handoffs are updated add a git commit using [conventional commits](./planning/conventional-commits.md) the commit should include the handoffs file and any other files which you changed since last updating the handoffs.

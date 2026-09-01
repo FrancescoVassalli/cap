@@ -10,10 +10,21 @@ import type { RouteHandler } from '../router.js'
 export const receiveUpload: RouteHandler = async (request, deps) => {
   const documentId = request.params.id ?? ''
   const token = request.query.get('token') ?? ''
-  const validation = deps.presigner.verifyUploadUrl(documentId, token)
+  const intakeId = request.query.get('intakeId') ?? undefined
+  const validation = deps.presigner.verifyUploadUrl(documentId, token, intakeId)
   if (!validation.ok) {
     return json(403, {
       error: { code: 'invalid_signature', message: 'This upload link is invalid or has expired.' },
+    })
+  }
+
+  // Mirror the production S3 contract: a direct PUT must carry the file bytes.
+  // Without a body the upload handoff did not actually transfer content, so we
+  // reject it instead of silently marking the document received. The bytes are
+  // read for this check and then discarded — never logged or persisted.
+  if (!request.body || Buffer.byteLength(request.body, 'utf8') === 0) {
+    return json(400, {
+      error: { code: 'empty_upload', message: 'The upload did not include any file content.' },
     })
   }
 

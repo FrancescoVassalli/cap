@@ -11,6 +11,11 @@ export type ApiConfig = {
   requireHttps: boolean
   uploadUrlExpirySeconds: number
   presignSecret: string
+  localPresignerMode: 'signed' | 'mock'
+  awsBucketName?: string
+  awsRegion?: string
+  /** Origins the browser API is allowed to call cross-origin. `*` reflects any origin. */
+  allowedOrigins: string[]
   maxBodyBytes: number
   rateLimit: {
     windowMs: number
@@ -18,16 +23,37 @@ export type ApiConfig = {
   }
 }
 
+export const DEFAULT_ALLOWED_ORIGINS = [
+  'http://localhost:5173',
+  'https://localhost:5173',
+  'http://127.0.0.1:5173',
+  'https://127.0.0.1:5173',
+  'https://cohealthinitiative.org',
+]
+
+function splitOrigins(value: string | undefined, fallback: string[]): string[] {
+  if (value === undefined || value.trim() === '') return fallback
+  return value
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0)
+}
+
 export function createConfig(
   env: Record<string, string | undefined> = process.env,
 ): ApiConfig {
   const port = Number(env['PORT'] ?? '8787')
+  const localPresignerMode = env['CAP_LOCAL_PRESIGNER_MODE'] === 'mock' ? 'mock' : 'signed'
   return {
     port,
     publicBaseUrl: env['CAP_PUBLIC_BASE_URL'] ?? `http://127.0.0.1:${port}`,
     requireHttps: env['CAP_REQUIRE_HTTPS'] === 'true',
     uploadUrlExpirySeconds: Number(env['CAP_UPLOAD_URL_EXPIRY_SECONDS'] ?? '300'),
     presignSecret: env['CAP_UPLOAD_SIGNING_SECRET'] ?? 'cap-dev-only-signing-secret',
+    localPresignerMode,
+    awsBucketName: env['S3_BUCKET_NAME'] ?? env['CAP_S3_BUCKET_NAME'],
+    awsRegion: env['AWS_REGION'] ?? env['AWS_DEFAULT_REGION'] ?? env['CAP_AWS_REGION'],
+    allowedOrigins: splitOrigins(env['CAP_ALLOWED_ORIGINS'], DEFAULT_ALLOWED_ORIGINS),
     maxBodyBytes: Number(env['CAP_MAX_BODY_BYTES'] ?? String(12 * 1024 * 1024)),
     rateLimit: {
       windowMs: Number(env['CAP_RATE_LIMIT_WINDOW_MS'] ?? '60000'),

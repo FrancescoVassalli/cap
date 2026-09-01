@@ -26,22 +26,36 @@ function signaturesEqual(left: Buffer, right: Buffer): boolean {
  * with an S3 presigner; the handler contract does not change.
  */
 export function createLocalPresigner(
-  config: Pick<ApiConfig, 'publicBaseUrl' | 'uploadUrlExpirySeconds' | 'presignSecret'>,
+  config: Pick<
+    ApiConfig,
+    'publicBaseUrl' | 'uploadUrlExpirySeconds' | 'presignSecret' | 'localPresignerMode'
+  >,
 ): UploadUrlPresigner {
   function sign(payload: string): string {
     return createHmac('sha256', config.presignSecret).update(payload).digest('hex')
   }
 
   return {
-    createUploadLocation(input: CreateUploadLocationInput): UploadLocation {
+    async createUploadLocation(input: CreateUploadLocationInput): Promise<UploadLocation> {
       const { intakeId, documentId, objectKey } = input
       const expiresAt = Date.now() + config.uploadUrlExpirySeconds * 1000
+
+      if (config.localPresignerMode === 'mock') {
+        const url = `${config.publicBaseUrl}/uploads/${documentId}?intakeId=${encodeURIComponent(intakeId)}`
+        return { url, objectKey, expiresAt: new Date(expiresAt) }
+      }
+
       const payload = `${intakeId}:${documentId}:${expiresAt}`
       const token = `${encodePayload(payload)}.${sign(payload)}`
       const url = `${config.publicBaseUrl}/uploads/${documentId}?token=${encodeURIComponent(token)}`
       return { url, objectKey, expiresAt: new Date(expiresAt) }
     },
-    verifyUploadUrl(documentId: string, token: string): UploadUrlValidation {
+    verifyUploadUrl(documentId: string, token: string, intakeId?: string): UploadUrlValidation {
+      if (config.localPresignerMode === 'mock') {
+        if (!intakeId) return { ok: false }
+        return { ok: true, intakeId, documentId }
+      }
+
       const separatorIndex = token.indexOf('.')
       if (separatorIndex === -1) return { ok: false }
       const [encodedPayload, providedSignature] = [
@@ -54,14 +68,14 @@ export function createLocalPresigner(
       } catch {
         return { ok: false }
       }
-      const [intakeId, embeddedDocumentId, expiry] = payload.split(':')
+      const [signedIntakeId, embeddedDocumentId, expiry] = payload.split(':')
       if (embeddedDocumentId !== documentId) return { ok: false }
       const expected = Buffer.from(sign(payload), 'hex')
       const provided = Buffer.from(providedSignature, 'hex')
       if (!signaturesEqual(expected, provided)) return { ok: false }
       const expiresAt = Number(expiry)
       if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) return { ok: false }
-      return { ok: true, intakeId, documentId }
+      return { ok: true, intakeId: signedIntakeId, documentId }
     },
   }
 }

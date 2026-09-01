@@ -63,7 +63,7 @@ TL;DR: Add a small production API behind the existing service boundary so the fr
 - [src/data/zipCodes.json](src/data/zipCodes.json) — example of dataset-backed front-end lookups; can be mirrored for backend validation if needed.
 
 ### Decision points
-- Prefer a serverless AWS API for the first production version because the frontend is static and the intake process is not CPU-heavy.
+- Prefer a serverless AWS Lambda API for the first production version because the frontend is static and the intake process is not CPU-heavy.
 - Keep the frontend contract stable and the backend implementation separate; the UI should not know whether it is talking to a mock, an email adapter, or a real API.
 - Exclude direct client-to-CRM access. Use a controlled API layer between the browser and the downstream system.
 - Use mock mode for local and CI testing, and real mode only in staging/production.
@@ -75,6 +75,5 @@ TL;DR: Add a small production API behind the existing service boundary so the fr
 4. Confirm privacy and logging requirements are satisfied before release.
 
 ### Further considerations
-1. Decide whether the first backend release should be AWS Lambda API Gateway or a small Node API behind ECS/Fargate. The static frontend and the current `ApiSubmissionService` shape lean toward a serverless API for speed and cost.
 2. Confirm the exact downstream CRM/email requirements before wiring in the final integration so the intake record schema and notification payload stay aligned.
 3. Decide on the minimal retention policy for uploaded documents and stored intake metadata to match legal and HIPAA-aware handling requirements.

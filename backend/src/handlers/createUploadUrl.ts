@@ -30,7 +30,7 @@ export const createUploadUrl: RouteHandler = async (request, deps) => {
 
   const documentId = randomUUID()
   const objectKey = `intakes/${intakeId}/documents/${documentId}`
-  const location = deps.presigner.createUploadLocation({
+  const location = await deps.presigner.createUploadLocation({
     intakeId,
     documentId,
     objectKey,
