@@ -10,7 +10,8 @@
     "ignoreDeprecations": "6.0",
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@cap/shared": ["./packages/shared/src/index.ts"]
     },
 
     /* Bundler mode */

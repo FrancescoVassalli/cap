@@ -1,52 +1,21 @@
-export type Language = 'en' | 'es'
-
-export type IntakeFormValues = {
-  zipCode: string
-  language: Language
-  firstName: string
-  lastName: string
-  email: string
-  phone: string
-  streetAddress: string
-  apartment: string
-  city: string
-  state: string
-  documents: IntakeDocument[]
-}
-
-export type IntakeDocument = {
-  id: string
-  name: string
-  size: number
-  type: string
-}
-
-export type ZipLocation = {
-  zipCode: string
-  city: string
-  state: string
-  county?: string
-}
-
-export type SubmissionStatus = 'idle' | 'loading' | 'success' | 'error'
-
 /**
- * Discriminates the intent of a failed submission so the UI can choose the
- * correct copy (generic failure vs. network interruption vs. expired session).
+ * Web app domain types.
+ *
+ * The intake domain model (form values, documents, zip locations, submission
+ * results/errors) is defined once in `@cap/shared` and re-exported here so both
+ * the web and mobile apps use identical types and validation contracts. Only
+ * web-specific content-structure types remain local.
  */
-export type SubmissionErrorKind = 'error' | 'networkError' | 'sessionExpired'
 
-export type IntakeSubmissionResult = {
-  success: boolean
-  referenceId?: string
-  message?: string
-  errorKind?: SubmissionErrorKind
-  /**
-   * Server-side field validation errors (email, postalCode, etc.). Mapped into
-   * Formik once the backend exists.
-   */
-  fieldErrors?: Record<string, string>
-}
+export type {
+  Language,
+  IntakeFormValues,
+  IntakeDocument,
+  ZipLocation,
+  SubmissionStatus,
+  SubmissionErrorKind,
+  IntakeSubmissionResult,
+} from '@cap/shared'
 
 export type ContentSection = {
   title: string

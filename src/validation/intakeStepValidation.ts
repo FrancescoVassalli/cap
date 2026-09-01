@@ -1,8 +1,18 @@
-import type { AllContent } from '@/content'
-import type { IntakeFormValues } from '@/types/index'
-import { PHONE_NUMBER_RE } from './intakeSchema'
+/**
+ * Web intake step validation.
+ *
+ * The actual validation rules live in `@cap/shared` so the web and mobile apps
+ * enforce identical business rules. This module keeps the web-specific mapping
+ * of steps to fields (a UI concern — the web flow has four steps while the
+ * mobile flow has more granular steps) and re-exports the shared validator,
+ * which is called with the platform's already-resolved message copy.
+ */
 
-export type IntakeFieldErrors = Partial<Record<keyof IntakeFormValues, string>>
+import { validateIntakeStep as sharedValidateIntakeStep } from '@cap/shared'
+import type { IntakeFieldErrors as SharedIntakeFieldErrors, ValidationMessages } from '@cap/shared'
+import type { IntakeFormValues } from '@/types/index'
+
+export type IntakeFieldErrors = SharedIntakeFieldErrors
 
 export const INTAKE_STEP_FIELDS: Record<number, Array<keyof IntakeFormValues>> = {
   0: ['zipCode'],
@@ -11,50 +21,15 @@ export const INTAKE_STEP_FIELDS: Record<number, Array<keyof IntakeFormValues>> =
   3: [],
 }
 
+/**
+ * Validates the active web step against the shared business rules. The web
+ * content layer already resolves localized error copy, so callers pass
+ * `content.intakeForm.errors` directly.
+ */
 export function validateIntakeStep(
   step: number,
   values: IntakeFormValues,
-  content: AllContent,
+  messages: ValidationMessages,
 ): IntakeFieldErrors {
-  const errors: IntakeFieldErrors = {}
-  const errorMessages = content.intakeForm.errors
-
-  if (step === 0) {
-    const cleanZip = values.zipCode.trim()
-    if (cleanZip && !/^\d{5}$/.test(cleanZip)) {
-      errors.zipCode = errorMessages.zipMustBeFiveDigits
-    }
-  }
-
-  if (step === 1 && !values.language) {
-    errors.language = errorMessages.selectLanguage
-  }
-
-  if (step === 2) {
-    if (!values.firstName.trim()) {
-      errors.firstName = errorMessages.required
-    }
-    if (!values.lastName.trim()) {
-      errors.lastName = errorMessages.required
-    }
-    if (!values.email.trim()) {
-      errors.email = errorMessages.required
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values.email.trim())) {
-      errors.email = errorMessages.invalidEmail
-    }
-    if (values.phone.trim() && !PHONE_NUMBER_RE.test(values.phone.trim())) {
-      errors.phone = errorMessages.invalidPhone
-    }
-    if (!values.streetAddress.trim()) {
-      errors.streetAddress = errorMessages.required
-    }
-    if (!values.city.trim()) {
-      errors.city = errorMessages.required
-    }
-    if (!values.state.trim()) {
-      errors.state = errorMessages.required
-    }
-  }
-
-  return errors
+  return sharedValidateIntakeStep(step, values, messages)
 }

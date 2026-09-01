@@ -115,7 +115,7 @@ export function IntakeForm({ intakeId }: IntakeFormProps) {
           language: 'language-en',
         }
 
-        const stepErrors: IntakeFieldErrors = validateIntakeStep(currentStep, values, content)
+        const stepErrors: IntakeFieldErrors = validateIntakeStep(currentStep, values, content.intakeForm.errors)
 
         const errorEntries: ErrorSummaryEntry[] = (Object.keys(stepErrors) as Array<keyof IntakeFormValues>).map(
           (field) => ({

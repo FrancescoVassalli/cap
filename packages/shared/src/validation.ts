@@ -8,7 +8,7 @@
  * platform's content layer.
  */
 
-import type { IntakeFormValues, Language, IntakeDocument } from './types'
+import type { IntakeFormValues, IntakeDocument } from './types'
 
 export const PHONE_NUMBER_RE = /^[\d\s()+.-]{7,}$/
 export const ZIP_CODE_RE = /^\d{5}$/

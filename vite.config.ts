@@ -7,6 +7,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': '/src',
+      '@cap/shared': '/packages/shared/src/index.ts',
     },
   },
   test: {
@@ -15,6 +16,7 @@ export default defineConfig({
         resolve: {
           alias: {
             '@': '/src',
+            '@cap/shared': '/packages/shared/src/index.ts',
           },
         },
         test: {
