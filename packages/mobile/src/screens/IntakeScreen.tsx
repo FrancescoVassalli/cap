@@ -25,6 +25,7 @@ import { ReviewStep } from '../components/intake/ReviewStep'
 import { SubmissionScreen } from './SubmissionScreen'
 import { createMobileServices } from '../services'
 import { mobileServiceConfig } from '../services/config'
+import { randomUUID } from '../utils/id'
 import type { RootStackParamList } from '../navigation/types'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Intake'>
@@ -216,7 +217,9 @@ function IntakeContent({ navigation }: { navigation: Props['navigation'] }) {
 }
 
 export function IntakeScreen({ route, navigation }: Props) {
-  const intakeId = route.params?.intakeId ?? `cap-${Date.now()}`
+  // A well-formed UUIDv4 session id is required by the backend `Idempotency-Key`
+  // gate. Deep-link entries without a param get a fresh one here.
+  const intakeId = route.params?.intakeId ?? randomUUID()
 
   return (
     <IntakeProvider intakeId={intakeId}>

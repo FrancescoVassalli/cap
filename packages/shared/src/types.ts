@@ -62,3 +62,19 @@ export type IntakeSubmissionResult = {
    */
   fieldErrors?: Record<string, string>
 }
+
+/** The application-level payload the form layer produces for a submission. */
+export type SubmissionPayload = {
+  intakeId: string
+  zipCode?: string
+  language: Language
+  firstName: string
+  lastName: string
+  email: string
+  phone?: string
+  streetAddress: string
+  apartment?: string
+  city: string
+  state: string
+  documents?: IntakeDocument[]
+}

@@ -136,6 +136,7 @@ The Expo mobile app and the shared domain contract are implemented and green. Bo
 
 **What was completed (cumulative)**
 - **`packages/shared`** — the single source of truth for the intake domain: types (`Language`, `IntakeFormValues`, `IntakeDocument`, `ZipLocation`, `SubmissionErrorKind`, `IntakeSubmissionResult`, `SubmissionPayload`), service interfaces (`SubmissionService`, `ZipService`, `DocumentUploadService`), transport-neutral step validation (`validateIntakeStep`, `DOCUMENT_CONFIG`, `validateDocumentCandidates`), and the `MockSubmissionService` / `ApiSubmissionService` adapters.
+- **Backend wire contract aligned across web + mobile** — the shared `ApiSubmissionService` now builds the same `application/x-www-form-urlencoded` EveryAction body the web sends (`FirstName`/`EmailAddress`/numeric `PreferredLanguages`, etc.) via a new shared `packages/shared/src/backend.ts` (the `everyActionMapper` moved into shared; the web module re-exports it). The intake/session id is a shared `generateIntakeId()` (UUIDv4, matching the backend's `Idempotency-Key` gate), used by the mobile flow instead of the invalid `cap-<timestamp>` fallback.
 - **`packages/mobile`** — an Expo SDK 51 + React Native 0.74 + TypeScript + React Navigation + Formik/Yup app (the repo layout uses `packages/mobile`, per the plan's `apps/mobile`-style package boundary):
   - **Theme + brand tokens** (`src/theme/index.ts`) mirroring the web CSS tokens (#1f4e79 primary, #2b6cb0 secondary, #fec524 highlight, 44pt touch targets, semantic colors) with no web-only imports.
   - **Bilingual content modules** (`src/content/index.ts`) extracting the approved EN/ES copy into typed `MobileContent`, with live EN/ES switching via `src/context/ContentContext.tsx`.
@@ -150,12 +151,12 @@ The Expo mobile app and the shared domain contract are implemented and green. Bo
 
 **Verified**
 - `packages/shared`: `tsc --noEmit` clean (via `tsc -b` at the root, which now includes it).
-- `packages/mobile`: `tsc --noEmit` clean; `npx expo export --platform android` bundles successfully (869 modules) proving `@cap/shared` resolves and the whole module graph is valid (including the `expo-file-system` byte-upload path); web export bundles (542 modules).
+- `packages/mobile`: `tsc --noEmit` clean; `npx expo export --platform android` bundles successfully (870 modules) proving `@cap/shared` resolves and the whole module graph is valid (including the `expo-file-system` byte-upload path); web export bundles (542 modules).
 - Web app migrated: `tsc -b` clean, `vitest run` 153/153 green, `vite build` succeeds, `npm run lint` clean (excluding the self-contained mobile dirs).
 
 ### Next steps
 
-1. **Wiring mobile to the real backend is config-driven and ready**: `packages/mobile/.env.example` documents the `EXPO_PUBLIC_CAP_SUBMISSION_MODE` / `EXPO_PUBLIC_CAP_UPLOAD_MODE` / `EXPO_PUBLIC_CAP_API_BASE_URL` vars (mirroring the web app's `VITE_CAP_*` selection), and `PresignedUploadService` PUTs the picked file bytes via `expo-file-system`'s `File` class. To go live: set those vars, verify the same `POST /intakes` / `POST /intakes/:id/upload-url` contract, then run on-device.
+1. **Wiring mobile to the real backend is config-driven, contract-aligned, and ready**: the shared submission adapter now posts the same form-encoded EveryAction body as the web app, the intake id is a backend-valid UUIDv4, `packages/mobile/.env.example` documents the `EXPO_PUBLIC_CAP_SUBMISSION_MODE` / `EXPO_PUBLIC_CAP_UPLOAD_MODE` / `EXPO_PUBLIC_CAP_API_BASE_URL` vars (mirroring the web app's `VITE_CAP_*` selection), and `PresignedUploadService` PUTs the picked file bytes via `expo-file-system`'s `File` class. To go live: set those vars, verify `POST /intakes` / `POST /intakes/:id/upload-url` against a running backend, then run on-device.
 2. **Optional Phase 4 hardening**: persist a non-PHI session token in `expo-secure-store` if/when auth/session resumption is needed; today all intake data lives only in React state so nothing sensitive is written anywhere.
 3. **QA on-device**: confirm no keyboard overlap across the contact/address step on both iPhone and Android, and that native document picking + the review/submit → success flow completes end-to-end.
 4. **Cleanup (future)**: remove the stale `apps/mobile` scaffold after confirming nothing references it.

@@ -8,26 +8,29 @@
  */
 
 import type {
-  IntakeDocument,
   IntakeSubmissionResult,
   SubmissionErrorKind,
+  SubmissionPayload,
   ZipLocation,
 } from './types'
+import { buildEveryActionMeta, buildUrlEncoded, toEveryActionBody } from './backend'
 
-/** The application-level payload the form layer produces for a submission. */
-export type SubmissionPayload = {
-  intakeId: string
-  zipCode?: string
-  language: 'en' | 'es'
-  firstName: string
-  lastName: string
-  email: string
-  phone?: string
-  streetAddress: string
-  apartment?: string
-  city: string
-  state: string
-  documents?: IntakeDocument[]
+/**
+ * Generates a UUIDv4 intake/session id matching the backend's session-id
+ * contract (`Idempotency-Key`). Uses the platform's `crypto.randomUUID` when
+ * available and falls back to a well-formed v4 string otherwise (format-gated
+ * by the backend; the id is a session key, never a security boundary).
+ */
+export function generateIntakeId(): string {
+  const c = globalThis as { crypto?: { randomUUID?: () => string } }
+  if (c.crypto && typeof c.crypto.randomUUID === 'function') {
+    return c.crypto.randomUUID()
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (char) => {
+    const random = Math.floor(Math.random() * 16)
+    const value = char === 'x' ? random : (random & 0x3) | 0x8
+    return value.toString(16)
+  })
 }
 
 /** Submission service contract. The form only depends on this interface. */
@@ -83,7 +86,7 @@ export class DocumentUploadError extends Error {
   }
 }
 
-function makeReferenceId(): string {
+export function makeReferenceId(): string {
   const segment = () => Math.random().toString(36).slice(2, 6).toUpperCase()
   return `CAP-${segment()}-${segment()}`
 }
@@ -124,8 +127,12 @@ export function createSubmissionService(
 
 /**
  * Production-shaped adapter mapping the application payload to the backend
- * contract. Kept transport-neutral (uses a `fetch`-like signature via a
- * lightweight request function) so it can run on both web and native.
+ * contract. It builds the flat, URL-encoded EveryAction body through the shared
+ * `buildEveryActionMeta` / `toEveryActionBody` / `buildUrlEncoded` pipeline —
+ * the same wire format the web app sends — so both platforms stay aligned.
+ * Kept transport-neutral (uses a `fetch`-like signature via an injectable
+ * request function) so it can run on both web and native. The intake id is sent
+ * as the `Idempotency-Key` (a UUIDv4 the backend gates on).
  */
 export class ApiSubmissionService implements SubmissionService {
   private readonly baseUrl: string
@@ -144,15 +151,21 @@ export class ApiSubmissionService implements SubmissionService {
       )
     }
 
+    const meta = buildEveryActionMeta(
+      {},
+      typeof navigator !== 'undefined' ? navigator.userAgent : undefined,
+    )
+    const body = buildUrlEncoded(toEveryActionBody(payload, meta))
+
     let response: Response
     try {
       response = await this.fetchImpl(`${this.baseUrl}/intakes`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
           'Idempotency-Key': payload.intakeId,
         },
-        body: JSON.stringify(payload),
+        body,
       })
     } catch {
       throw new SubmissionError('networkError', 'Could not connect to the service.')
