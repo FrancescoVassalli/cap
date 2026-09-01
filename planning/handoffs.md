@@ -132,7 +132,7 @@ Drives the [React Native plan](./react-native-app.md) for the CAP mobile app. We
 
 ### Status
 
-The Expo mobile app and the shared domain contract are implemented and green. Both the web app and the mobile app now share the same domain types, validation rules, and service contracts through `packages/shared`.
+The Expo mobile app and the shared domain contract are implemented and green. Both the web app and the mobile app now share the same domain types, validation rules, and service contracts through `packages/shared`. Mobile backend wiring is config-driven (`EXPO_PUBLIC_CAP_*`, mirroring the web's `VITE_CAP_*`), with a byte-PUT presigned upload adapter ready to attach to the live API.
 
 **What was completed this round**
 - **`packages/shared`** — new package housing the domain model formerly in `src/types/index.ts`: `Language`, `IntakeFormValues`, `IntakeDocument`, `ZipLocation`, `SubmissionErrorKind`, `IntakeSubmissionResult`, `SubmissionPayload`, the service interfaces (`SubmissionService`, `ZipService`, `DocumentUploadService`), transport-neutral step validation (`validateIntakeStep`, `INTAKE_STEP_FIELDS`, `DOCUMENT_CONFIG`, `validateDocumentCandidates`), and the `MockSubmissionService` / `ApiSubmissionService` adapters. `packages/shared/tsconfig.json` typechecks clean.
@@ -142,18 +142,18 @@ The Expo mobile app and the shared domain contract are implemented and green. Bo
   - **App shell + stack navigation** (`App.tsx`, `src/navigation/types.ts`) wiring Home → IntakeLanding → Intake.
   - **Screens** (`src/screens/HomeScreen.tsx`, `IntakeLandingScreen.tsx`, `IntakeScreen.tsx`, `SubmissionScreen.tsx`) mirroring the web `/how-we-help` → `/intake` → `/intake/:id` flow.
   - **Step-based intake** (`src/components/intake/{ZipStep,LanguageStep,ContactStep,DocumentsStep,ReviewStep}.tsx` + `StepShell`/`StepProgress`/`StepBody`) covering ZIP lookup (with optional autofill + not-found notice), language, contact/address, native document selection, review-with-edit, and submit. Validation is authoritative per active step via the shared rules; field errors are tied to each control for screen readers.
-  - **Service adapters** behind the shared contracts (`src/services/index.ts`, `zip.ts`, `documentUpload.ts`, `documentPicker.ts`) with the mobile `StaticZipService` (tiny embedded CO dataset) and a local UI-only upload adapter; the submission API adapter reuses the shared `ApiSubmissionService`.
+  - **Service adapters** behind the shared contracts (`src/services/index.ts`, `config.ts`, `zip.ts`, `documentUpload.ts`, `documentPicker.ts`) with the mobile `StaticZipService` (tiny embedded CO dataset), a config-driven service resolver (`resolveMobileServiceConfig` reading `EXPO_PUBLIC_CAP_*`, mirroring the web's `VITE_CAP_*` selection), and both a local UI-only upload adapter and a real `PresignedUploadService` that PUTs picked-file bytes via `expo-file-system`'s `File` class when a backend is configured. `src/context/DocumentUrisContext.tsx` carries transient local file URIs (pick-time → submit-time) without putting them in the shared `IntakeDocument` metadata type.
   - **Security/accessibility**: no PHI logged or put in URLs/query strings (bodies only); documents stored as metadata in React state only (no persistence — stronger than SecureStore for the no-PHI-at-rest requirement); 44pt+ touch targets, accessible labels/hints, `accessibilityRole`/`accessibilityState`, `accessibilityLiveRegion` progress, and WCAG 2.2 AA error association.
-  - `metro.config.cjs` extends `expo/metro-config` to resolve and transpile the TypeScript-source `@cap/shared` package; `babel.config.cjs` + `app.json` configure the runnable Expo app.
+  - `metro.config.cjs` extends `expo/metro-config` to resolve and transpile the TypeScript-source `@cap/shared` package; `babel.config.cjs` + `app.json` configure the runnable Expo app; `.env.example` documents the backend wiring vars.
 
 **Verified**
 - `packages/shared`: `tsc --noEmit` clean.
-- `packages/mobile`: `tsc --noEmit` clean; `npx expo export --platform android` bundles successfully (862 modules, ~1.95 MB) proving `@cap/shared` resolves and the whole module graph is valid.
+- `packages/mobile`: `tsc --noEmit` clean; `npx expo export --platform android` bundles successfully (869 modules) proving `@cap/shared` resolves and the whole module graph is valid (including the `expo-file-system` byte-upload path).
 - Web app unchanged: `tsc -b` clean and `vitest run` 153/153 green (the shared package is additive; the web app still owns its own `src/types` and was not migrated in this round).
 
 ### Next steps
 
 1. **Migrate the web app to consume `packages/shared`** (path alias) so both platforms import the *same* domain types and validation code, then re-run the web build/tests — the shared contract already matches `src/types` and the web validation rules exactly, so wiring it in is config-only.
-2. **Wire mobile to the real backend** (Phase 5): set the mobile submission base URL and enable `ApiSubmissionService` + the presigned upload adapter against the same `POST /intakes` / `POST /intakes/:id/upload-url` contract as the web app (HTTPS-only), with retry/session-expired handling already present in `SubmissionScreen`.
+2. **Wiring mobile to the real backend is now config-driven**: `packages/mobile/.env.example` documents the `EXPO_PUBLIC_CAP_SUBMISSION_MODE` / `EXPO_PUBLIC_CAP_UPLOAD_MODE` / `EXPO_PUBLIC_CAP_API_BASE_URL` vars (mirroring the web app's `VITE_CAP_*` selection), and `PresignedUploadService` now PUTs the picked file bytes via `expo-file-system`'s `File` class (falls back gracefully when unavailable). To go live: set those vars, verify the same `POST /intakes` / `POST /intakes/:id/upload-url` contract, then run on-device.
 3. **Optional Phase 4 hardening**: persist a non-PHI session token in `expo-secure-store` if/when auth/session resumption is needed; today all intake data lives only in React state so nothing sensitive is written anywhere.
 4. **QA on-device**: confirm no keyboard overlap across the contact/address step on both iPhone and Android, and that native document picking + the review/submit → success flow completes end-to-end.

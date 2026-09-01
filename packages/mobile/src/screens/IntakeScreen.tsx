@@ -15,6 +15,7 @@ import type { IntakeFormValues } from '@cap/shared'
 import { validateIntakeStep, type IntakeFieldErrors } from '@cap/shared'
 import { StepShell } from '../components/StepShell'
 import { IntakeProvider, useIntake } from '../context/IntakeContext'
+import { DocumentUrisProvider, useDocumentUris } from '../context/DocumentUrisContext'
 import { getContent, useLanguage } from '../context/ContentContext'
 import { ZipStep } from '../components/intake/ZipStep'
 import { LanguageStep } from '../components/intake/LanguageStep'
@@ -22,7 +23,8 @@ import { ContactStep } from '../components/intake/ContactStep'
 import { DocumentsStep } from '../components/intake/DocumentsStep'
 import { ReviewStep } from '../components/intake/ReviewStep'
 import { SubmissionScreen } from './SubmissionScreen'
-import { mobileServices } from '../services'
+import { createMobileServices } from '../services'
+import { mobileServiceConfig } from '../services/config'
 import type { RootStackParamList } from '../navigation/types'
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Intake'>
@@ -45,6 +47,11 @@ function IntakeContent({ navigation }: { navigation: Props['navigation'] }) {
   const content = getContent()
   const { language } = useLanguage()
   const { intakeId } = useIntake()
+  const docUris = useDocumentUris()
+  const services = useMemo(
+    () => createMobileServices(mobileServiceConfig),
+    [docUris.resolve],
+  )
   const [step, setStep] = useState(0)
   const stepRef = React.useRef(0)
   stepRef.current = step
@@ -78,11 +85,16 @@ function IntakeContent({ navigation }: { navigation: Props['navigation'] }) {
       documents: vals.documents,
     }
     try {
-      const result = await mobileServices.submission.submit(payload)
+      const result = await services.submission.submit(payload)
       if (result.success) {
         for (const document of vals.documents) {
-          await mobileServices.documentUpload.upload(
-            { name: document.name, size: document.size, type: document.type },
+          await services.documentUpload.upload(
+            {
+              name: document.name,
+              size: document.size,
+              type: document.type,
+              uri: docUris.resolve(document.id),
+            },
             intakeId,
           )
         }
@@ -208,7 +220,9 @@ export function IntakeScreen({ route, navigation }: Props) {
 
   return (
     <IntakeProvider intakeId={intakeId}>
-      <IntakeContent navigation={navigation} />
+      <DocumentUrisProvider>
+        <IntakeContent navigation={navigation} />
+      </DocumentUrisProvider>
     </IntakeProvider>
   )
 }

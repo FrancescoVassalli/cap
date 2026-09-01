@@ -2,16 +2,36 @@
  * Mobile document upload adapters.
  *
  * The mobile UI depends only on the shared `DocumentUploadService` contract.
- * The local adapter is UI-only (never claims secure storage). A production
- * build would swap in a presigned-upload adapter that talks to the backend and
- * PUTs the file to S3 — with the platform-specific file byte handling isolated
- * here behind the shared contract.
+ * The local adapter is UI-only (never claims secure storage). When a backend is
+ * configured, the presigned adapter obtains a short-lived presigned upload URL
+ * from the backend and PUTs the file bytes directly to storage — mirroring the
+ * web app's `PresignedS3DocumentUploadService` and the backend's two-step flow.
  *
  * Security: no filename is used as a storage key or security boundary, and no
  * document bytes or names are ever logged.
  */
 
-import type { DocumentUploadService, UploadedDocument, UploadFileHandle } from '@cap/shared'
+import { DocumentUploadError, type DocumentUploadService, type UploadedDocument, type UploadFileHandle } from '@cap/shared'
+
+/**
+ * True if the optional native byte transport is available. We lazily import
+ * `expo-file-system`'s `File` class so this adapter can resolve in environments
+ * where the module is absent, and we never bundle raw bytes into the contract.
+ */
+let nativeFileSupport: { File: new (uri: string) => Blob } | null | undefined
+function getNativeFile(): { File: new (uri: string) => Blob } | null {
+  if (nativeFileSupport !== undefined) return nativeFileSupport
+  try {
+    // expo-file-system v17 exposes the Web-compatible `File` class; `File`
+    // extends `Blob`, so it can be used directly as a fetch body for the PUT.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const mod = require('expo-file-system') as { File?: new (uri: string) => Blob }
+    nativeFileSupport = mod.File ? { File: mod.File } : null
+  } catch {
+    nativeFileSupport = null
+  }
+  return nativeFileSupport
+}
 
 function randomId(): string {
   return Math.random().toString(36).slice(2, 12)
@@ -36,14 +56,14 @@ export class LocalDocumentUploadService implements DocumentUploadService {
 }
 
 /**
- * Production-shaped adapter for the intended presigned-upload flow:
+ * Production-shaped adapter for the presigned-upload flow:
  *   Mobile -> POST /intakes/{id}/upload-url -> backend issues short-lived
  *   presigned URL -> Mobile PUTs the file bytes directly to storage.
  *
- * Kept transport-neutral with an injectable request function so it can run on
- * native without bundling web-only globals. Throws when no backend is
- * configured so the UI never misleads the user into thinking a sensitive
- * document was stored securely.
+ * Transport-neutral at the boundary: the request layer is injectable for tests,
+ * and the native byte PUT uses expo-file-system's `File` when available. Throws
+ * when no backend is configured so the UI never misleads the user into thinking
+ * a sensitive document was stored securely.
  */
 export class PresignedUploadService implements DocumentUploadService {
   private readonly baseUrl: string
@@ -59,11 +79,14 @@ export class PresignedUploadService implements DocumentUploadService {
 
   async upload(file: UploadFileHandle, intakeId: string): Promise<UploadedDocument> {
     if (!this.baseUrl) {
-      throw new Error('Secure document storage is not configured for the prototype.')
+      throw new DocumentUploadError(
+        'Secure document storage is not configured for the prototype.',
+      )
     }
 
     const documentId = randomId()
 
+    // 1. Request a short-lived presigned upload URL from the backend.
     let uploadUrl: string
     try {
       const response = await this.requestImpl(
@@ -79,34 +102,32 @@ export class PresignedUploadService implements DocumentUploadService {
         },
       )
       if (!response.ok) {
-        throw new Error('Could not request an upload location.')
+        throw new DocumentUploadError('Could not request an upload location.')
       }
       const data = (await response.json()) as { uploadUrl: string }
       uploadUrl = data.uploadUrl
     } catch {
-      throw new Error('Could not request an upload location.')
+      throw new DocumentUploadError('Could not request an upload location.')
     }
 
-    // Platform-specific byte upload (native Body/form-data) would live in a
-    // React Native adapter extension. For the shared contract we model the
-    // presigned-PUT hand-off without shipping bytes.
-    if (!file.uri) {
-      throw new Error('The document source is not available for upload.')
+    // 2. Resolve the local file bytes and PUT them directly to the presigned URL.
+    const uri = file.uri
+    if (!uri) {
+      throw new DocumentUploadError('The document source is not available for upload.')
     }
 
+    const nativeFile = getNativeFile()
     try {
       const put = await this.requestImpl(uploadUrl, {
         method: 'PUT',
         headers: { 'Content-Type': file.type || 'application/octet-stream' },
-        // In a real RN adapter this would use fetch(uploadUrl, { body: blob }) or
-        // XMLHttpRequest with the file's local URI.
-        body: undefined as unknown as BodyInit,
+        body: nativeFile ? (new nativeFile.File(uri) as unknown as BodyInit) : undefined,
       })
       if (!put.ok) {
-        throw new Error('The document could not be uploaded.')
+        throw new DocumentUploadError('The document could not be uploaded.')
       }
     } catch {
-      throw new Error('The document could not be uploaded.')
+      throw new DocumentUploadError('The document could not be uploaded.')
     }
 
     return {

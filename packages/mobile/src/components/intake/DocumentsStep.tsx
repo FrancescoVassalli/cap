@@ -15,6 +15,7 @@ import { validateDocumentCandidates } from '@cap/shared'
 import { StepBody } from '../StepBody'
 import { Button } from '../Button'
 import { getContent } from '../../context/ContentContext'
+import { useDocumentUris } from '../../context/DocumentUrisContext'
 import { pickDocuments } from '../../services/documentPicker'
 import { theme } from '../../theme'
 
@@ -23,6 +24,7 @@ export function DocumentsStep() {
   const doc = content.intakeForm.documents
   const [errorsList, setErrorsList] = useState<string[]>([])
   const { values, setFieldValue } = useFormikContext<IntakeFormValues>()
+  const { register, unregister } = useDocumentUris()
 
   const handleChooseFiles = async () => {
     setErrorsList([])
@@ -35,19 +37,18 @@ export function DocumentsStep() {
     if (result.accepted.length > 0) {
       const acceptedDocs = result.accepted.map((a) => {
         const source = picked.find((p) => p.name === a.name && p.size === a.size)
-        return {
-          id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-          name: a.name,
-          size: a.size,
-          type: a.type,
-          ...(source?.uri ? { _uri: undefined } : {}),
-        }
+        const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+        // Keep the transient local file uri out of the shared metadata type;
+        // register it here so the upload adapter can access the bytes later.
+        if (source?.uri) register(id, source.uri)
+        return { id, name: a.name, size: a.size, type: a.type }
       })
       await setFieldValue('documents', [...values.documents, ...acceptedDocs])
     }
   }
 
   const removeDocument = async (id: string) => {
+    unregister(id)
     await setFieldValue(
       'documents',
       values.documents.filter((doc) => doc.id !== id),
