@@ -66,15 +66,65 @@ Vite's `.env.local` by default, the frontend test project now forces
 the in-memory mocks while the dev app talks to the real API.
 
 **Next steps**
-1. Production deployment of the backend is the remaining external step: provision
-   API Gateway/Lambda/CloudFront in front of the same handlers (the S3 bucket
-   itself exists and the presigned flow is confirmed working). The every-action
-   (CRM) contract is still outstanding.
+1. API/Lambda + API Gateway production wiring remains blocked on IAM/account
+   grants (see the deployment-infrastructure section below) and on the
+   every-action (CRM) contract, which is still outstanding.
 2. Add Playwright E2E runner to the standard `npm test`/CI path so the presigned
    upload contract stays covered; currently it runs only via the explicit
    `npx playwright test` invocation against a running backend + frontend.
 3. Confirm the CORS origin whitelist in production (`CAP_ALLOWED_ORIGINS`) to the
    exact static-host origin before release.
+
+## deployment-infrastructure — Windows-native AWS deployment
+
+**Status:** A Windows-native deployment is implemented (`scripts/deploy/deploy-aws.ps1`
++ `scripts/deploy/package-api.ps1`) and the **static frontend is deployed live** to
+the real S3 bucket `cap-frontend-590251390266-us-east-2-an` (build + sync + correct
+cache headers verified against the account). The API Lambda artifact is packaged and
+its handler is verified functional (a real S3 presigned upload URL is issued from the
+extracted zip). What cannot be done from the current `cap-agent` AWS session is
+documented below so an administrator can unlock the remaining layers.
+
+**What is in the repo**
+- `scripts/deploy/deploy-aws.ps1` — Windows-native analogue of `scripts/deploy-aws.sh`
+  (the bash original is Unix-only and will not run on this Windows machine). Same CLI
+  surface (`-Check`, `-DryRun`, `-Frontend`, `-Api`, `-Region`, `-FrontendBucket`,
+  `-CloudFrontId`, `-ApiFunction`, `-ApiPackage`, `-FrontendDir`), plus a per-deployable
+  IAM permission preflight so `-Check` reports exactly which layers are reachable.
+- `scripts/deploy/package-api.ps1` — builds the backend (`npm run build:api`) and zips a
+  self-contained Lambda artifact to `dist-lambda/cap-api.zip` (handler `handler.handler`).
+- `backend/src/handler.ts` — production Lambda entrypoint wiring
+  `createApiDependencies(process.env)` into `createLambdaHandler` (handler name `handler.handler`).
+- npm scripts: `build:api`, `deploy:check`, `deploy:frontend`, `deploy:api`, `deploy:package-api`.
+
+**Verified working from this session (`cap-agent`, account 590251390266, us-east-2)**
+- `deploy-aws.ps1 -Frontend`: builds the bundle and syncs it to the frontend bucket with
+  the correct cache headers (`assets/*` immutable, `index.html` no-cache). The deployed
+  files are present in S3 (confirmed via `aws s3 ls` + `head-object`).
+- `package-api.ps1`: produces `dist-lambda/cap-api.zip`; invoking `handler` from the
+  extracted zip returns `200 {"status":"ok"}` on `/health` and a signed S3 presigned URL
+  on the upload-url route (local vendor `dist` was cleaned).
+
+**Blockers needing an administrator (permissions verified against the live account)**
+- Lambda deploy: `lambda:CreateFunction` **is** allowed, but `iam:CreateRole` is **denied**,
+  so no Lambda execution role can be created by this session. A functioning Lambda requires
+  a role (or an `iam:CreateRole`/`iam:PassRole` grant). Set `CAP_LAMBDA_ROLE_ARN` to an
+  admin-provisioned execution role to let the API path create/update the function.
+- API Gateway: `apigateway:*` is **denied**, so no public HTTP API endpoint can be created.
+- CloudFront: `cloudfront:CreateDistribution` is blocked by **account verification** (AWS
+  support must verify the account before adding new distributions). OAC `cap-frontend-oac`
+  (`E1EMZ30G5M3VFD`) was created and a ready-to-use distribution config/rollout note is in
+  `planning/deployment-infrastructure.md`.
+
+**Next steps (for an AWS administrator or a broadened IAM policy)**
+1. Grant `iam:CreateRole` + `iam:PassRole` + `lambda:CreateFunction` (or pre-provision an
+   execution role and set `CAP_LAMBDA_ROLE_ARN`), then run `deploy-aws.ps1 -Api`.
+2. Verify the AWS account for CloudFront, then create the distribution with OAC
+   `cap-frontend-oac` (config in the deployment-infrastructure plan) and set
+   `CAP_CLOUDFRONT_DISTRIBUTION_ID`; `deploy-aws.ps1 -Frontend` will then invalidate it.
+3. Grant `apigatewayv2:*` (or REST API) to expose the Lambda behind a public HTTPS URL and
+   point `VITE_CAP_API_BASE_URL` / `CAP_API_BASE_URL` at it.
+4. Confirm `CAP_ALLOWED_ORIGINS` to the exact static-host origin before public release.
 
 ## react-native-app — mobile app implementation
 

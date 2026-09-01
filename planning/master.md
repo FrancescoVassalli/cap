@@ -119,9 +119,7 @@ Whether the frontend talks directly to the API or through another layer
 What third-party analytics/scripts are permitted
 
 ## Infrastructure 
-Plan aws infrastructure to support this system 
-
-
+Plan aws infrastructure to support this system. The frontend should be hosted statically on s3 with the public `cap-frontend-590251390266-us-east-2-an` bucket accessed with cloudfront. There should be a lambda function for the API which should log to cloudwatch. 
 
 ## API
 [Implementation plan](./api-implementation.md)
