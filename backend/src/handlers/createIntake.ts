@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto'
 import { json } from '../http.js'
 import type { RouteHandler } from '../router.js'
 import { validateIntakeForm } from '../validation/intake.js'
-import type { IntakeRecord } from '../repository/store.js'
+import type { IntakeLogEntry, IntakeRecord } from '../repository/store.js'
 
 const INTAKE_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -37,6 +37,20 @@ function buildStoredFields(form: URLSearchParams): Record<string, string> {
   for (const key of STORED_FIELDS) {
     const value = (form.get(key) ?? '').trim()
     if (value) fields[key] = value
+  }
+  return fields
+}
+
+/**
+ * Captures the complete submitted form input verbatim. Unlike `buildStoredFields`,
+ * this retains every posted field (consumer data plus metadata markers) because
+ * it is the durable audit log — it never feeds the PHI-free stdout logger.
+ */
+function buildFullFormInput(form: URLSearchParams): Record<string, string> {
+  const fields: Record<string, string> = {}
+  for (const [key, value] of form.entries()) {
+    const trimmed = value.trim()
+    if (trimmed) fields[key] = trimmed
   }
   return fields
 }
@@ -77,6 +91,21 @@ export const createIntake: RouteHandler = async (request, deps) => {
   }
 
   await deps.store.createIntake(record)
+
+  // Write the received form input to the durable intake audit log. This is the
+  // "write the form input to a log" step: it records exactly what was submitted
+  // in the store (inspectable via `getIntakeLog`), keeping the PHI-free stdout
+  // logger clean. Only first-time submissions are logged; idempotent replays
+  // return early above and never duplicate the entry.
+  const logEntry: IntakeLogEntry = {
+    id: `${record.intakeId}-${record.receivedAt}`,
+    intakeId: record.intakeId,
+    sourceChannel: record.sourceChannel,
+    receivedAt: record.receivedAt,
+    fields: buildFullFormInput(form),
+  }
+  await deps.store.appendIntakeLog(logEntry)
+
   deps.logger.log('info', 'intake-accepted', {
     intakeId: record.intakeId,
     referenceId: record.referenceId,

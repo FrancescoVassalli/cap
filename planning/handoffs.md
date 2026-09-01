@@ -41,6 +41,16 @@ bytes validated then discarded).
 Playwright E2E upload test passes, and the S3 presigned PUT lands the file in the
 bucket (confirmed by the E2E run and a direct `-InFile` PUT).
 
+**Intake submission log (added this round):** the final `POST /intakes` Submit
+Request endpoint now also **writes the received form input to a durable intake
+audit log** (`store.appendIntakeLog` / `getIntakeLog`), an append-only per-intake
+`logs` collection in the store — intentionally separate from the PHI-free stdout
+logger so raw consumer data is never emitted to operation logs. First-time
+submissions record the full submitted form input; idempotent replays return
+early and never duplicate the entry. Covered by new backend tests (write on
+submit, no duplicate on replay, no log for invalid input, no consumer data in
+stdout). Suite is now 153/153 green.
+
 **Next steps**
 1. Production deployment of the backend is the remaining external step: provision
    API Gateway/Lambda/CloudFront in front of the same handlers (the S3 bucket

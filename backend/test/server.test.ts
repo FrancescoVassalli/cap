@@ -143,6 +143,66 @@ describe('POST /intakes', () => {
   })
 })
 
+describe('intake submission log', () => {
+  let runtime: TestRuntime
+
+  beforeAll(async () => {
+    runtime = await startTestServer()
+  })
+
+  afterAll(async () => {
+    await runtime.close()
+  })
+
+  it('writes the received form input to the durable intake log', async () => {
+    const intakeId = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'
+    const response = await postIntake(runtime, intakeBody(), intakeId)
+    expect(response.status).toBe(201)
+
+    // The durable store log captures the full submitted form input even though
+    // the PHI-free stdout logger does not.
+    const logs = runtime.store.snapshot().logs.filter((log) => log.intakeId === intakeId)
+    expect(logs).toHaveLength(1)
+    expect(logs[0].sourceChannel).toBe('web')
+    expect(logs[0].fields.FirstName).toBe('Avery')
+    expect(logs[0].fields.EmailAddress).toBe('avery@example.com')
+    expect(logs[0].fields.PostalCode).toBe('80203')
+    expect(logs[0].fields.HomePhone).toBe('3035551234')
+
+    // The same via the store accessor used by production callers.
+    const byAccessor = await runtime.store.getIntakeLog(intakeId)
+    expect(byAccessor).toHaveLength(1)
+    expect(byAccessor[0].fields.FirstName).toBe('Avery')
+  })
+
+  it('does not duplicate the log entry on an idempotent replay', async () => {
+    const intakeId = 'ffffffff-ffff-4fff-8fff-ffffffffffff'
+    const first = await postIntake(runtime, intakeBody(), intakeId)
+    expect(first.status).toBe(201)
+    const second = await postIntake(runtime, intakeBody(), intakeId)
+    expect(second.status).toBe(200)
+
+    const logs = runtime.store.snapshot().logs.filter((log) => log.intakeId === intakeId)
+    expect(logs).toHaveLength(1)
+  })
+
+  it('does not write a log entry for an invalid submission', async () => {
+    const intakeId = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'
+    const response = await postIntake(runtime, intakeBody({ EmailAddress: '' }), intakeId)
+    expect(response.status).toBe(422)
+
+    const logs = runtime.store.snapshot().logs.filter((log) => log.intakeId === intakeId)
+    expect(logs).toHaveLength(0)
+  })
+
+  it('keeps the full form input out of the stdout logger', () => {
+    const joined = runtime.logLines.join('\n')
+    expect(joined).not.toContain('avery@example.com')
+    expect(joined).not.toContain('Avery')
+    expect(joined).not.toContain('3035551234')
+  })
+})
+
 describe('POST /intakes/:id/upload-url', () => {
   let runtime: TestRuntime
 
@@ -189,6 +249,39 @@ describe('POST /intakes/:id/upload-url', () => {
     expect(documents[0].contentType).toBe('application/pdf')
     expect(documents[0].size).toBe(2048)
     expect(documents[0].objectKey).not.toContain('bill.pdf')
+  })
+
+  it('allows a mock local presigner mode without signed tokens', async () => {
+    const mockRuntime = await startTestServer({}, { CAP_LOCAL_PRESIGNER_MODE: 'mock' })
+
+    try {
+      const response = await fetch(`${mockRuntime.baseUrl}/intakes/${VALID_INTAKE_ID}/upload-url`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileName: 'mock.pdf',
+          contentType: 'application/pdf',
+          size: 1024,
+        }),
+      })
+
+      expect(response.status).toBe(200)
+      const data = await parse<{ uploadUrl?: string }>(response)
+      expect(data.uploadUrl).toMatch(new RegExp(`^${mockRuntime.baseUrl}/uploads/`))
+      expect(data.uploadUrl).not.toContain('token=')
+
+      const put = await fetch(data.uploadUrl as string, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/pdf' },
+        body: 'file-bytes',
+      })
+      expect(put.status).toBe(200)
+
+      const documents = mockRuntime.store.snapshot().documents
+      expect(documents[0]?.status).toBe('uploaded')
+    } finally {
+      await mockRuntime.close()
+    }
   })
 
   it('rejects unsupported file types', async () => {
@@ -328,6 +421,75 @@ describe('rate limiting', () => {
     expect(third.status).toBe(429)
     const data = await parse<{ error?: { code?: string } }>(third)
     expect(data.error?.code).toBe('rate_limited')
+  })
+})
+
+describe('CORS', () => {
+  let runtime: TestRuntime
+
+  beforeAll(async () => {
+    runtime = await startTestServer()
+  })
+
+  afterAll(async () => {
+    await runtime.close()
+  })
+
+  it('answers an OPTIONS preflight from an allowed origin', async () => {
+    const response = await fetch(`${runtime.baseUrl}/intakes/${VALID_INTAKE_ID}/upload-url`, {
+      method: 'OPTIONS',
+      headers: {
+        Origin: 'http://localhost:5173',
+        'Access-Control-Request-Method': 'POST',
+        'Access-Control-Request-Headers': 'content-type',
+      },
+    })
+    expect(response.status).toBe(204)
+    expect(response.headers.get('access-control-allow-origin')).toBe('http://localhost:5173')
+    expect(response.headers.get('access-control-allow-methods')).toContain('POST')
+    expect(response.headers.get('access-control-allow-headers') ?? '').toMatch(/content-type/i)
+  })
+
+  it('includes CORS headers on a normal cross-origin request', async () => {
+    const response = await fetch(`${runtime.baseUrl}/health`, {
+      headers: { Origin: 'http://localhost:5173' },
+    })
+    expect(response.headers.get('access-control-allow-origin')).toBe('http://localhost:5173')
+  })
+
+  it('does not echo a disallowed origin', async () => {
+    const response = await fetch(`${runtime.baseUrl}/health`, {
+      headers: { Origin: 'https://evil.example' },
+    })
+    expect(response.headers.get('access-control-allow-origin')).toBeNull()
+  })
+
+  it('rejects a preflight from a disallowed origin', async () => {
+    const response = await fetch(`${runtime.baseUrl}/intakes/${VALID_INTAKE_ID}/upload-url`, {
+      method: 'OPTIONS',
+      headers: {
+        Origin: 'https://evil.example',
+        'Access-Control-Request-Method': 'POST',
+      },
+    })
+    expect(response.status).toBe(403)
+  })
+
+  it('reflects a custom configured origin list', async () => {
+    const customRuntime = await startTestServer({}, { CAP_ALLOWED_ORIGINS: 'https://app.cap.example' })
+    try {
+      const allowed = await fetch(`${customRuntime.baseUrl}/health`, {
+        headers: { Origin: 'https://app.cap.example' },
+      })
+      expect(allowed.headers.get('access-control-allow-origin')).toBe('https://app.cap.example')
+
+      const denied = await fetch(`${customRuntime.baseUrl}/health`, {
+        headers: { Origin: 'http://localhost:5173' },
+      })
+      expect(denied.headers.get('access-control-allow-origin')).toBeNull()
+    } finally {
+      await customRuntime.close()
+    }
   })
 })
 

@@ -1,7 +1,7 @@
-import type { DocumentRecord, IntakeRecord, Store } from './store.js'
+import type { DocumentRecord, IntakeLogEntry, IntakeRecord, Store } from './store.js'
 
 export type MemoryStore = Store & {
-  snapshot: () => { intakes: IntakeRecord[]; documents: DocumentRecord[] }
+  snapshot: () => { intakes: IntakeRecord[]; documents: DocumentRecord[]; logs: IntakeLogEntry[] }
 }
 
 /**
@@ -12,6 +12,7 @@ export type MemoryStore = Store & {
 export function createMemoryStore(): MemoryStore {
   const intakes = new Map<string, IntakeRecord>()
   const documents = new Map<string, DocumentRecord>()
+  const logs = new Map<string, IntakeLogEntry[]>()
 
   return {
     async createIntake(record) {
@@ -20,6 +21,15 @@ export function createMemoryStore(): MemoryStore {
     },
     async getIntakeByIntakeId(intakeId) {
       return intakes.get(intakeId) ?? null
+    },
+    async appendIntakeLog(entry) {
+      const current = logs.get(entry.intakeId) ?? []
+      current.push(entry)
+      logs.set(entry.intakeId, current)
+      return entry
+    },
+    async getIntakeLog(intakeId) {
+      return [...(logs.get(intakeId) ?? [])]
     },
     async listDocuments(intakeId) {
       return [...documents.values()].filter((document) => document.intakeId === intakeId)
@@ -43,6 +53,7 @@ export function createMemoryStore(): MemoryStore {
       return {
         intakes: [...intakes.values()],
         documents: [...documents.values()],
+        logs: [...logs.values()].flat(),
       }
     },
   }
