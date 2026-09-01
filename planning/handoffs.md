@@ -162,3 +162,8 @@ The Expo mobile app and the shared domain contract are implemented and green. Bo
 3. **QA on-device**: confirm no keyboard overlap across the contact/address step on both iPhone and Android, and that native document picking + the review/submit → success flow completes end-to-end.
 4. **Mobile UI/component tests (future)**: the fast pure-logic suite covers the service/config/validation layer; UI step components (`zip`, `language`, `contact`, `documents`, `review`) are not yet rendered in a harness (would need `jest-expo`/`react-native-testing-library`).
 5. **Cleanup (future)**: remove the stale `apps/mobile` scaffold after confirming nothing references it.
+
+### BLOCKED (external resources)
+
+- **Live backend wiring** (handoff item 1): verifying `POST /intakes` / `POST /intakes/:id/upload-url` against a running CAP backend requires the deployed Lambda/API URL, AWS credentials, and a live EveryAction/CRM contract — none available in this environment. All config/env/mapper/upload code is in place and contract-verified against `backend/src/handlers/createIntake.ts`; this step is set-Env-and-run-on-device.
+- **QA on-device** (handoff item 3): requires an iPhone/Android device or emulator for keyboard-safe-area, document-picking, and end-to-end submission testing — not available here.
