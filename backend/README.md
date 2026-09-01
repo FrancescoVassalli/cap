@@ -69,6 +69,27 @@ Starts the API on `PORT` (default `8787`) after compiling `backend/` to
 `backend/dist`. Run it alongside the frontend for local development against the
 real backend behavior instead of the in-memory mocks.
 
+### Switching between S3 and local mock uploads
+
+The presigner is chosen once at startup from the environment. With a fully
+configured `S3_BUCKET_NAME` / `AWS_REGION` / `AWS_ACCESS_KEY_ID` /
+`AWS_SECRET_ACCESS_KEY` present (as in the gitignored `.env`), the backend
+returns real S3 presigned URLs and the browser PUTs files straight to S3.
+
+To point uploads back at the local server instead (file bytes are validated then
+discarded — no AWS or stored file), set:
+
+```
+CAP_LOCAL_PRESIGNER_MODE=mock
+```
+
+That single flag is the easy S3↔mock toggle: no frontend or `.env.local`
+change is needed, because the frontend `PresignedS3DocumentUploadService` PUTs
+to whatever URL the backend returns (S3 or the localhost sink). Leaving
+`CAP_LOCAL_PRESIGNER_MODE` unset (the default `signed`) with no S3 credentials
+also falls back to the local presigner automatically. The active mode is logged
+at startup as `presigner-s3-active` or `presigner-local-active`.
+
 ```bash
 npm run test:backend
 ```
@@ -83,8 +104,10 @@ Runs the backend test suite (also included in `npm run test` via the vitest
 | `PORT` | `8787` | Local server port |
 | `CAP_PUBLIC_BASE_URL` | `http://127.0.0.1:<port>` | Base URL embedded in local presigned URLs |
 | `CAP_REQUIRE_HTTPS` | `false` | Reject plain-HTTP requests when `true` |
+| `CAP_LOCAL_PRESIGNER_MODE` | `signed` | `signed` issues a tokenized upload URL; `mock` skips token validation for local-only testing |
 | `CAP_UPLOAD_URL_EXPIRY_SECONDS` | `300` | Presigned upload URL lifetime |
 | `CAP_UPLOAD_SIGNING_SECRET` | dev-only constant | HMAC key for local presigned URLs; **must** be provided from the secret store in production |
+| `CAP_ALLOWED_ORIGINS` | localhost dev + `https://cohealthinitiative.org` | Comma-separated browser origins the API will serve cross-origin (CORS). Set to `*` to reflect any origin, or a specific list in production. |
 | `CAP_MAX_BODY_BYTES` | `12582912` | Request body cap (fits a 10 MB upload) |
 | `CAP_RATE_LIMIT_WINDOW_MS` | `60000` | Rate-limit window for public POST routes |
 | `CAP_RATE_LIMIT_MAX_REQUESTS` | `60` | Max requests per client in the window |
@@ -126,6 +149,12 @@ production deployment; the presigner is swapped for an S3 V4 presigner.
 
 - HTTPS-only when deployed; plain-HTTP requests are rejected under
   `CAP_REQUIRE_HTTPS=true` and sensitive data never appears in query strings.
+- CORS is enabled for the configured `CAP_ALLOWED_ORIGINS` so a static frontend
+  host can call the API cross-origin. Preflight (`OPTIONS`) requests are
+  answered with scoped allow headers; disallowed origins receive no allow header
+  (and a `403` on preflight), so the browser blocks them. `ACCESS-CONTROL-ALLOW-*`
+  are emitted by the shared dispatcher (`backend/src/api.ts`) so both the local
+  server and the Lambda adapter behave identically.
 - Idempotency is enforced on the intake id so retries and double-clicks cannot
   create duplicate records.
 - Document metadata is sanitized (path separators and control characters

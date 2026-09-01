@@ -3,42 +3,49 @@ This is the current implementation handoff for the CAP project. It reflects the 
 
 ### API implementation — file storage / presigned upload flow
 
-**Status:** The local presigned-upload flow is wired end-to-end. Selecting a
-document in the web app now issues real network traffic to the backend to obtain
-a presigned URL, then PUTs the file bytes directly to that URL.
+**Status:** File storage is working end-to-end and **verified against real S3**.
+Selecting a document in the web app issues real network traffic to the backend
+to obtain a presigned upload URL, and the browser PUTs the file bytes directly
+to that URL. A real `PUT -InFile` to a freshly issued S3 presigned URL returns
+`200` and the file is visible in the bucket. A **local/mock sink** is available
+as an easy toggle for development and CI (PUTs to `http://127.0.0.1:8787/uploads/...`,
+bytes validated then discarded).
 
 **What was fixed/verified this round**
-- Root cause of "no network traffic on upload": the frontend defaulted to the
-  in-memory `LocalDocumentUploadService` because the Vite env vars
-  (`VITE_CAP_UPLOAD_MODE=s3`, `VITE_CAP_API_BASE_URL`) were not configured. A
-  gitignored `.env.local` now enables the `PresignedS3DocumentUploadService`
-  against the running backend.
-- The backend HTTP server emitted no CORS headers, so cross-origin calls from
-  the browser (localhost:5173 → localhost:8787) would have been blocked.
-  Added shared CORS handling (`backend/src/cors.ts`) wired into the route
-  dispatcher (`backend/src/api.ts`) so both the local Node server and the Lambda
-  adapter answer preflights and emit scoped `Access-Control-Allow-*` headers.
-- New `CAP_ALLOWED_ORIGINS` config (defaults to localhost dev origins plus
-  `https://cohealthinitiative.org`).
-- Added `tests/documentUpload.spec.ts` — a Playwright E2E test that drives the
-  intake flow to the documents step, selects a file, and asserts the
-  `POST /intakes/:id/upload-url` request and the subsequent PUT to the presigned
-  URL. Passes against the running backend.
-- Left on `.env.local` only upload mode (not `VITE_CAP_SUBMISSION_MODE=api`);
-  enabling submission mode would break existing unit tests that rely on the
-  in-memory mock. The upload endpoint does not require the intake to exist first.
+- S3 presigner (`backend/src/presigner/s3Presigner.ts`) now activates from the
+  real AWS credentials in the gitignored `.env` (`S3_BUCKET_NAME`,
+  `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`). With a current
+  build/restart the backend returns `https://...s3...amazonaws.com/...` presigned
+  URLs and stores the file. The earlier localhost `…/uploads/…` URL the browser
+  showed was from a server still running the local presigner (before S3 was
+  wired / creds loaded); a restart picked up S3.
+- Empty-PUT confusion: a `PUT` with no body sends no file content (the local
+  sink explicitly rejects it as `empty_upload`, and S3 rejects an empty object
+  handoff). The frontend `PresignedS3DocumentUploadService` sends `body: file`
+  correctly, so the selected file's bytes transfer.
+- Presigner selection is now deterministic and explicit at startup
+  (`backend/src/index.ts`): S3 is used only when bucket + region + credentials
+  are all present; otherwise it falls back to the local presigner and logs the
+  active mode (`presigner-s3-active` / `presigner-local-active`) so a silent
+  localhost "upload" is never hidden.
+- Easy S3 ↔ mock switch documented: set `CAP_LOCAL_PRESIGNER_MODE=mock` (backend
+  env) to PUT to the local server instead of S3. Because the frontend adapter
+  PUTs to whatever URL the backend returns, **no frontend `.env.local` change is
+  needed** — this is purely a backend env flag. Documented in `backend/README.md`
+  and `env.example`.
+- Architecture docs (`architecture/master.md`, `architecture/implementation-audit.md`)
+  updated to reflect the working file storage and backend.
 
-**Verified:** vitest 149/149 (95 frontend + 54 backend incl. 5 new CORS tests),
-`tsc --noEmit` clean, `vite build` clean, ESLint clean on touched files, and the
-Playwright E2E upload test passes.
+**Verified:** vitest 149/149 (95 frontend + 54 backend incl. CORS tests),
+`tsc --noEmit` clean, backend `tsc -p backend/tsconfig.build.json` clean, the
+Playwright E2E upload test passes, and the S3 presigned PUT lands the file in the
+bucket (confirmed by the E2E run and a direct `-InFile` PUT).
 
 **Next steps**
-1. Deployment of the real backend remains blocked on external dependencies
-   (AWS credentials for provisioning, and the CRM contract). AWS account
-   details live in `.env`/`env.example`. The production S3 presigner
-   (`backend/src/presigner/s3Presigner.ts`) is scaffolded and activates when
-   `S3_BUCKET_NAME`, `AWS_REGION`, and `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`
-   are present — needs a deployed S3 bucket + API Gateway/Lambda before use.
+1. Production deployment of the backend is the remaining external step: provision
+   API Gateway/Lambda/CloudFront in front of the same handlers (the S3 bucket
+   itself exists and the presigned flow is confirmed working). The every-action
+   (CRM) contract is still outstanding.
 2. Add Playwright E2E runner to the standard `npm test`/CI path so the presigned
    upload contract stays covered; currently it runs only via the explicit
    `npx playwright test` invocation against a running backend + frontend.

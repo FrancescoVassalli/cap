@@ -2,7 +2,7 @@
 
 ## Current status
 
-The CAP frontend has moved past the initial scaffold phase and is now in the downstream implementation phase. The project is no longer primarily about setup and infrastructure; the informational pages and the localized EN/ES intake form flow are implemented (with accessible validation and submission states), the app shell and navigation are polished, the service layer is finalized behind real adapters and dedicated hooks, and the visual / branding pass has repainted the app onto the CAP/CCHI palette. The remaining work is final end-to-end QA/validation of the assembled application.
+The CAP project has moved past the initial scaffold phase and is now in the downstream implementation stage. The informational pages and the localized EN/ES intake form flow are implemented (with accessible validation and submission states), the app shell and navigation are polished, the service layer is finalized behind real adapters and dedicated hooks, and the visual / branding pass has repainted the app onto the CAP/CCHI palette. In addition, the real backend API and secure presigned file-storage flow are now implemented and verified working end-to-end — selecting a document issues a presigned URL and the file PUT lands in the S3 bucket, with a local/mock sink available for development and CI. The remaining work is final deployment wiring (API Gateway/Lambda, the EveryAction CRM contract) and end-to-end QA/validation of the assembled application.
 
 The most current implementation status is captured in [../planning/handoffs.md](../planning/handoffs.md), which identifies the project as being in the product-facing feature stage rather than the startup phase.
 
@@ -109,12 +109,28 @@ For documented implementation drift against the original plan, see [./implementa
 - Added a thin `useEveryActionSubmission` hook (mirroring `useIntakeSubmission`) that composes the mapper/payload assembly with the existing `SubmissionService` boundary, so `IntakeForm` calls a single clean `submit(values)` and never sees EveryAction specifics. It preserves the idle/loading/success/error lifecycle and duplicate-click prevention.
 - Unit tests (`src/services/everyActionMapper.test.ts`, `src/hooks/useEveryActionSubmission.test.ts`) and new `ApiSubmissionService` assertions cover every mapped field, optional ZIP/phone skip, language-id mapping through the config seam, URL-encoding of special characters, session/client/browser/device metadata, the hook happy path + failures + duplicate guard, and the URL-encoded request body.
 
+### Backend API and secure file storage (API implementation agent)
+The production backend behind the service boundaries is now implemented and the presigned file-upload flow is verified working end-to-end — including a real upload that lands in the S3 bucket. The frontend service contracts remain the boundary; the UI never knows whether it is talking to S3, the local sink, or a mock.
+- Built a small transport-neutral backend under `backend/` sharing one route dispatcher (`src/api.ts`) between the local Node server (`src/server.ts`) and a Lambda adapter (`src/lambda.ts`). Routes: `GET /health`, `POST /intakes` (idempotent by `Idempotency-Key`), `POST /intakes/:id/upload-url`, and `PUT /uploads/:id` (the local-mode sink only).
+- Intake submission (`src/handlers/createIntake.ts`) validates required fields, uses the client `crypto.randomUUID()` intake id as the idempotency key (rejects forged/non-UUID ids as `session_expired`), stores metadata, and returns a canonical `{ referenceId }` with structured validation errors.
+- Secure document upload: the backend validates file name, MIME, per-file ≤ 10 MB and cumulative ≤ 50 MB limits (`src/validation/upload.ts`), sanitizes the file name, issues a **presigned upload URL** for `S3_BUCKET_NAME` (`src/presigner/s3Presigner.ts`), persists document metadata, and lets the browser PUT the file bytes directly to storage — never through the app's own API. Verified: a real `PUT -InFile` to a generated S3 presigned URL returns 200 and the file is visible in the bucket.
+- Two interchangeable presigner implementations behind one contract (`src/presigner/presigner.ts`):
+  - **S3** (`s3Presigner.ts`) — real AWS Signature V4 URLs when the bucket, region, and credentials are present.
+  - **Local** (`localPresigner.ts`) — a signed (`signed`) or unsigned (`mock`) localhost `…/uploads/:id` sink so development/CI exercise the exact two-step presigned flow without AWS. In local mode the file bytes are read for the empty-body check and then discarded (never stored or logged).
+- Backend runtime mode is driven by env: `CAP_LOCAL_PRESIGNER_MODE` (`mock` forces the local sink; any other value + S3 credentials selects S3), `CAP_PUBLIC_BASE_URL`, `CAP_REQUIRE_HTTPS`, `CAP_UPLOAD_URL_EXPIRY_SECONDS`, and `CAP_ALLOWED_ORIGINS`. The local presigner is selected whenever S3 is not fully configured so local/CI keep working. Presigner selection happens once at startup and is logged (`presigner-s3-active` / `presigner-local-active`), so a silent localhost upload is never hidden.
+- Shared CORS handling (`backend/src/cors.ts`) wired into the dispatcher answers preflights and emits scoped `Access-Control-Allow-*` headers for both the Node server and Lambda adapter; origin whitelist is configurable (`CAP_ALLOWED_ORIGINS`, defaults to localhost dev origins plus `https://cohealthinitiative.org`).
+- Security and privacy hardening: HTTPS-required toggle, no sensitive intake data in query strings (the signed upload token is opaque), bodies size-capped, rate limiting on public write endpoints, HMAC-signed upload tokens verified with `timingSafeEqual`, and structured logging that records only safe identifiers/error categories — no PHI, raw payloads, or document content.
+- Frontend wiring is purely configuration: `.env.local` sets `VITE_CAP_UPLOAD_MODE=s3` + `VITE_CAP_API_BASE_URL=http://localhost:8787`, which selects `PresignedS3DocumentUploadService` against the running backend through `src/services/index.ts`. That adapter is mode-agnostic about the returned URL, so it works whether the backend returns an S3 URL or the localhost sink — making the S3↔mock switch a single backend env flag with no UI change.
+- Automated tests: 54 backend tests (CORS, validation, idempotency, contract, server, lambda) plus frontend suites; the whole `vitest` run is 149/149 green. A Playwright E2E (`tests/documentUpload.spec.ts`) drives the intake to the documents step, selects a file, and asserts both the `POST /intakes/:id/upload-url` request and the PUT to the presigned URL.
+
 ## Remaining work
 
-The service layer, app shell, intake flow, and visual/branding pass are implemented and green. Remaining items are final QA and release-readiness:
+The service layer, app shell, intake flow, visual/branding pass, backend API, and secure file storage are implemented and green; the presigned S3 upload is verified working against the real bucket. Remaining items are deployment and final QA:
 
 - Validate the complete end-to-end experience in QA (state flow, step navigation, skip logic, service error/retry states, success handling, accessibility, mobile behavior) before signoff.
-- Exercise the `ApiSubmissionService` and `PresignedS3DocumentUploadService` adapters against a real backend contract once one is available.
+- Production deployment of the backend remains blocked on external dependencies: the AWS API Gateway/Lambda/CloudFront wiring (the S3 bucket itself exists and the presigned flow is confirmed working), and the CRM (EveryAction) contract. AWS details live in the gitignored `.env`.
+- Add the Playwright E2E upload runner to the standard `npm test`/CI path; it currently runs via an explicit `npx playwright test` against a running frontend + backend.
+- Confirm the production CORS `CAP_ALLOWED_ORIGINS` to the exact static-host origin before release.
 - Run the Accessibility auditor (WCAG 2.2 AA) as the designated sign-off gate; Security/Release auditors remain outside the demo scope per the plan.
 
 ## Architecture direction
@@ -128,6 +144,7 @@ The application is intentionally designed as a static, mobile-first frontend pro
 - Centralized content modules for bilingual copy, consumed by components at render time
 - Service abstractions for ZIP lookup, submission, and document upload so the static prototype can be replaced by a backend without rewriting the intake UI
 - No browser persistence for intake data to keep sensitive information out of local storage
+- A small serverless-ready backend behind those service boundaries (Node server for local dev, Lambda adapter for deployment) exposing intake submission and presigned document uploads, with a local/mock sink for development and CI and an S3 presigner for production — the frontend stays transport-agnostic
 
 ## Key implementation files
 
@@ -167,7 +184,20 @@ The application is intentionally designed as a static, mobile-first frontend pro
 - [../src/content/types.ts](../src/content/types.ts)
 - [../src/content/en.ts](../src/content/en.ts)
 - [../src/content/es.ts](../src/content/es.ts)
+- [../backend/src/api.ts](../backend/src/api.ts) (transport-neutral route dispatcher shared by Node + Lambda)
+- [../backend/src/server.ts](../backend/src/server.ts) (local Node HTTP server)
+- [../backend/src/lambda.ts](../backend/src/lambda.ts) (Lambda adapter)
+- [../backend/src/config.ts](../backend/src/config.ts) (runtime env config)
+- [../backend/src/cors.ts](../backend/src/cors.ts) (shared CORS handling)
+- [../backend/src/handlers/createIntake.ts](../backend/src/handlers/createIntake.ts)
+- [../backend/src/handlers/createUploadUrl.ts](../backend/src/handlers/createUploadUrl.ts)
+- [../backend/src/handlers/receiveUpload.ts](../backend/src/handlers/receiveUpload.ts)
+- [../backend/src/presigner/presigner.ts](../backend/src/presigner/presigner.ts)
+- [../backend/src/presigner/s3Presigner.ts](../backend/src/presigner/s3Presigner.ts)
+- [../backend/src/presigner/localPresigner.ts](../backend/src/presigner/localPresigner.ts)
+- [../backend/src/validation/upload.ts](../backend/src/validation/upload.ts)
+- [../backend/src/repository/](../backend/src/repository/) (in-memory store, swappable for durable storage)
 
 ## Bottom line
 
-The project is functionally past the foundation milestone and has a stable UI shell, reusable design system, content architecture that is fully consumed by the app, informational pages, a localized bilingual multi-step intake flow with accessible validation and submission states, a completed navigation polish pass (header/footer, route consistency, intake progress, and route-level orientation), and a finalized service layer (real ZIP/submission/upload adapters behind a service registry and dedicated hooks). The remaining value is validating the full application behavior end-to-end in final QA.
+The project is functionally past the foundation milestone and has a stable UI shell, reusable design system, content architecture that is fully consumed by the app, informational pages, a localized bilingual multi-step intake flow with accessible validation and submission states, a completed navigation polish pass (header/footer, route consistency, intake progress, and route-level orientation), a finalized service layer (real ZIP/submission/upload adapters behind a service registry and dedicated hooks), and a working backend API with a verified secure presigned S3 upload flow (plus a local/mock sink for development and CI). The remaining value is final deployment wiring (API Gateway/Lambda and the EveryAction CRM contract) and validating the full application behavior end-to-end in final QA.

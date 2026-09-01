@@ -4,14 +4,15 @@
 This document captures the gaps between the original frontend implementation guide and the current repository state, and tracks which gaps have been closed. It helps the next agent pick up the real remaining work without assuming the project is still at the design or foundation phase.
 
 ## Summary
-The implementation is materially ahead of the initial planning baseline and is functionally green. The product-facing app shell, content layer, public routes, navigation polish, service layer, and Formik intake form are all present, working, and wired together. The service contracts are no longer backed by in-place mocks; they are backed by real adapters behind a service registry and consumed through dedicated hooks. The remaining work is a final end-to-end QA / Integration pass and, later, exercising the production-shaped adapters against a real backend.
+The implementation is materially ahead of the initial planning baseline and is functionally green. The product-facing app shell, content layer, public routes, navigation polish, service layer, Formik intake form, backend API, and secure presigned file storage are all present, working, and wired together. The service contracts are no longer backed by in-place mocks; they are backed by real adapters behind a service registry and consumed through dedicated hooks. A real backend now sits behind those boundaries, and selecting a document issues a presigned URL and stores the uploaded file in the S3 bucket (with a local/mock sink for development and CI). The remaining work is a final end-to-end QA / Integration pass and, later, production deployment and pointing the submission adapter at the live EveryAction endpoint.
 
 ## Verified status
 The repo passes the project verification commands:
-- `npm run test` (9 test files, 53 tests)
+- `npm run test` (17 test files, 149 tests — 95 frontend + 54 backend)
 - `npm run build`
 - `npm run lint`
 - `npm run typecheck`
+- Backend: `npm run test:backend`, typescript build (`tsc -p backend/tsconfig.build.json`), and a Playwright E2E upload test that asserts the presigned-URL request and the PUT to storage.
 
 The production build uses the stricter `tsc -b` check and is green.
 
@@ -43,12 +44,12 @@ The original audit flagged a minimal shell and utilitarian route experience. Thi
 
 ## Remaining gaps vs the plan
 - The app is not yet validated as a single end-to-end experience (routing, state flow, ZIP skip/unknown, document skipping, submission error/retry, success paths, accessibility, mobile) — the Integration / QA pass.
-- The `ApiSubmissionService` and `PresignedS3DocumentUploadService` adapters are ready but not yet exercised against a real backend; no backend exists for the static prototype.
+- The `PresignedS3DocumentUploadService` adapter is exercised against the real backend and stores files in the S3 bucket (verified). The `ApiSubmissionService` adapter is implemented but not yet pointed at a live production EveryAction endpoint, which depends on the external CRM contract. Production deployment of the backend (API Gateway/Lambda/CloudFront) also remains pending.
 
 ## Recommendation
 The implementation should proceed in the following order:
 1. Final QA / Integration Agent: validate the assembled app end-to-end before sign-off.
 2. Final accessibility audit under the WCAG 2.2 AA target, if not already covered by the QA pass.
-3. Wire the production-shaped adapters (`ApiSubmissionService`, `PresignedS3DocumentUploadService`) to the real backend once available.
+3. Deploy the backend (API Gateway/Lambda/CloudFront) and wire the `ApiSubmissionService` to the production EveryAction endpoint once the CRM contract is available.
 
 This preserves the architectural boundaries established in the plan.
