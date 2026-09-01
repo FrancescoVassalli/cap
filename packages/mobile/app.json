@@ -1,0 +1,28 @@
+{
+  "expo": {
+    "name": "Consumer Assistance Program",
+    "slug": "cap",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "org.cohealthinitiative.cap"
+    },
+    "android": {
+      "package": "org.cohealthinitiative.cap",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#1f4e79"
+      }
+    },
+    "plugins": ["expo-secure-store", "expo-document-picker"]
+  }
+}

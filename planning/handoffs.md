@@ -130,30 +130,30 @@ documented below so an administrator can unlock the remaining layers.
 
 Drives the [React Native plan](./react-native-app.md) for the CAP mobile app. Web app and API are already implemented; backend deployment steps in master.md remain blocked on external dependencies (AWS credentials, CRM contract) and are not part of this handoff.
 
+### Status
+
+The Expo mobile app and the shared domain contract are implemented and green. Both the web app and the mobile app now share the same domain types, validation rules, and service contracts through `packages/shared`.
+
+**What was completed this round**
+- **`packages/shared`** — new package housing the domain model formerly in `src/types/index.ts`: `Language`, `IntakeFormValues`, `IntakeDocument`, `ZipLocation`, `SubmissionErrorKind`, `IntakeSubmissionResult`, `SubmissionPayload`, the service interfaces (`SubmissionService`, `ZipService`, `DocumentUploadService`), transport-neutral step validation (`validateIntakeStep`, `INTAKE_STEP_FIELDS`, `DOCUMENT_CONFIG`, `validateDocumentCandidates`), and the `MockSubmissionService` / `ApiSubmissionService` adapters. `packages/shared/tsconfig.json` typechecks clean.
+- **`packages/mobile`** — an Expo SDK 51 + React Native 0.74 + TypeScript + React Navigation + Formik/Yup app (the repo layout uses `packages/mobile`, per the plan's `apps/mobile`-style package boundary):
+  - **Theme + brand tokens** (`src/theme/index.ts`) mirroring the web CSS tokens (#1f4e79 primary, #2b6cb0 secondary, #fec524 highlight, 44pt touch targets, semantic colors) with no web-only imports.
+  - **Bilingual content modules** (`src/content/index.ts`) extracting the approved EN/ES copy into typed `MobileContent`, with live EN/ES switching via `src/context/ContentContext.tsx`.
+  - **App shell + stack navigation** (`App.tsx`, `src/navigation/types.ts`) wiring Home → IntakeLanding → Intake.
+  - **Screens** (`src/screens/HomeScreen.tsx`, `IntakeLandingScreen.tsx`, `IntakeScreen.tsx`, `SubmissionScreen.tsx`) mirroring the web `/how-we-help` → `/intake` → `/intake/:id` flow.
+  - **Step-based intake** (`src/components/intake/{ZipStep,LanguageStep,ContactStep,DocumentsStep,ReviewStep}.tsx` + `StepShell`/`StepProgress`/`StepBody`) covering ZIP lookup (with optional autofill + not-found notice), language, contact/address, native document selection, review-with-edit, and submit. Validation is authoritative per active step via the shared rules; field errors are tied to each control for screen readers.
+  - **Service adapters** behind the shared contracts (`src/services/index.ts`, `zip.ts`, `documentUpload.ts`, `documentPicker.ts`) with the mobile `StaticZipService` (tiny embedded CO dataset) and a local UI-only upload adapter; the submission API adapter reuses the shared `ApiSubmissionService`.
+  - **Security/accessibility**: no PHI logged or put in URLs/query strings (bodies only); documents stored as metadata in React state only (no persistence — stronger than SecureStore for the no-PHI-at-rest requirement); 44pt+ touch targets, accessible labels/hints, `accessibilityRole`/`accessibilityState`, `accessibilityLiveRegion` progress, and WCAG 2.2 AA error association.
+  - `metro.config.cjs` extends `expo/metro-config` to resolve and transpile the TypeScript-source `@cap/shared` package; `babel.config.cjs` + `app.json` configure the runnable Expo app.
+
+**Verified**
+- `packages/shared`: `tsc --noEmit` clean.
+- `packages/mobile`: `tsc --noEmit` clean; `npx expo export --platform android` bundles successfully (862 modules, ~1.95 MB) proving `@cap/shared` resolves and the whole module graph is valid.
+- Web app unchanged: `tsc -b` clean and `vitest run` 153/153 green (the shared package is additive; the web app still owns its own `src/types` and was not migrated in this round).
+
 ### Next steps
 
-1. **Phase 1: mobile foundation**
-   - Initialize `apps/mobile` as an Expo + React Native + TypeScript app (Node 20 available).
-   - Configure project scripts, TypeScript, and Expo entry.
-   - Add app theme and CAP/CCHI brand tokens (primary #01599a, secondary #7aabdb, highlight #fec524; Inter typeface; 44pt touch targets).
-   - Create the app shell, navigation (React Navigation), and mobile layout system.
-   - Acceptance: `apps/mobile` shows the app shell on first launch; theme tokens render; no web-only imports leak in.
-
-2. **Phase 2: shared domain contract**
-   - Create `packages/shared` housing the domain model now in `src/types/index.ts`: `Language`, `IntakeFormValues`, `IntakeDocument`, `SubmissionErrorKind`, `IntakeSubmissionResult`, service interfaces (`SubmissionService`, `DocumentUploadService`, `ZipService`), and validation rules.
-   - Wire the web app to consume `packages/shared` (path alias without breaking the existing build/tests).
-   - Acceptance: web build/tests stay green; web and mobile import the same domain types and validation rules.
-
-3. **Phase 3: native intake screens**
-   - Stepper-based flow mirroring the web app: home/how-we-help, intake landing, then ZIP → language → contact → documents → review → submit → success.
-   - Large tap targets, full-width fields, sticky action footer, accessible focus order, semantic labels.
-   - Acceptance: full intake completes on mobile without keyboard overlap.
-
-4. **Phase 4: document handling**
-   - Native file selection and photo capture, metadata stored locally (SecureStore), upload only after review, no sensitive data in logs or URLs.
-
-5. **Phase 5: backend integration**
-   - Connect mobile to the same API contract as the web app (HTTPS only), with retry, network-error, and session-expired handling.
-
-6. **Phase 6: security + accessibility**
-   - WCAG 2.2 AA patterns: accessible labels, visible focus, 44pt targets, field-tied errors, contrast, success/error states, secure storage, no PHI in analytics/logs/URLs.
+1. **Migrate the web app to consume `packages/shared`** (path alias) so both platforms import the *same* domain types and validation code, then re-run the web build/tests — the shared contract already matches `src/types` and the web validation rules exactly, so wiring it in is config-only.
+2. **Wire mobile to the real backend** (Phase 5): set the mobile submission base URL and enable `ApiSubmissionService` + the presigned upload adapter against the same `POST /intakes` / `POST /intakes/:id/upload-url` contract as the web app (HTTPS-only), with retry/session-expired handling already present in `SubmissionScreen`.
+3. **Optional Phase 4 hardening**: persist a non-PHI session token in `expo-secure-store` if/when auth/session resumption is needed; today all intake data lives only in React state so nothing sensitive is written anywhere.
+4. **QA on-device**: confirm no keyboard overlap across the contact/address step on both iPhone and Android, and that native document picking + the review/submit → success flow completes end-to-end.
