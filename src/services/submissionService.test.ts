@@ -155,6 +155,29 @@ describe('ApiSubmissionService', () => {
       vi.unstubAllGlobals()
     }
   })
+
+  it('retries a transient transport failure before succeeding', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+        .mockResolvedValueOnce({
+          status: 200,
+          ok: true,
+          json: async () => ({ referenceId: 'CAP-ABCD-EFGH', message: 'ok' }),
+        }),
+    )
+    try {
+      const service = new ApiSubmissionService('https://cap.example')
+      const result = await service.submit(makePayload())
+      expect(result.success).toBe(true)
+      expect(result.referenceId).toBe('CAP-ABCD-EFGH')
+      expect(globalThis.fetch).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
 })
 
 describe('createSubmissionService', () => {

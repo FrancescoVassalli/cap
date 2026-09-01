@@ -136,7 +136,7 @@ The Expo mobile app and the shared domain contract are implemented and green. Bo
 
 **What was completed (cumulative)**
 - **`packages/shared`** — the single source of truth for the intake domain: types (`Language`, `IntakeFormValues`, `IntakeDocument`, `ZipLocation`, `SubmissionErrorKind`, `IntakeSubmissionResult`, `SubmissionPayload`), service interfaces (`SubmissionService`, `ZipService`, `DocumentUploadService`), transport-neutral step validation (`validateIntakeStep`, `DOCUMENT_CONFIG`, `validateDocumentCandidates`), and the `MockSubmissionService` / `ApiSubmissionService` adapters.
-- **Backend wire contract aligned across web + mobile** — the shared `ApiSubmissionService` now builds the same `application/x-www-form-urlencoded` EveryAction body the web sends (`FirstName`/`EmailAddress`/numeric `PreferredLanguages`, etc.) via a new shared `packages/shared/src/backend.ts` (the `everyActionMapper` moved into shared; the web module re-exports it). The intake/session id is a shared `generateIntakeId()` (UUIDv4, matching the backend's `Idempotency-Key` gate), used by the mobile flow instead of the invalid `cap-<timestamp>` fallback.
+- **Backend wire contract aligned across web + mobile** — the shared `ApiSubmissionService` now builds the same `application/x-www-form-urlencoded` EveryAction body the web sends (`FirstName`/`EmailAddress`/numeric `PreferredLanguages`, etc.) via a new shared `packages/shared/src/backend.ts` (the `everyActionMapper` moved into shared; the web module re-exports it). The intake/session id is a shared `generateIntakeId()` (UUIDv4, matching the backend's `Idempotency-Key` gate), used by the mobile flow instead of the invalid `cap-<timestamp>` fallback. The submission adapter also does a bounded (2 attempts, 400ms backoff) retry on transport-level failure only — server-side idempotency via the `Idempotency-Key` makes this safe, and HTTP responses (including 5xx) are never retried.
 - **`packages/mobile`** — an Expo SDK 51 + React Native 0.74 + TypeScript + React Navigation + Formik/Yup app (the repo layout uses `packages/mobile`, per the plan's `apps/mobile`-style package boundary):
   - **Theme + brand tokens** (`src/theme/index.ts`) mirroring the web CSS tokens (#1f4e79 primary, #2b6cb0 secondary, #fec524 highlight, 44pt touch targets, semantic colors) with no web-only imports.
   - **Bilingual content modules** (`src/content/index.ts`) extracting the approved EN/ES copy into typed `MobileContent`, with live EN/ES switching via `src/context/ContentContext.tsx`.
@@ -153,7 +153,7 @@ The Expo mobile app and the shared domain contract are implemented and green. Bo
 **Verified**
 - `packages/shared`: `tsc --noEmit` clean (via `tsc -b` at the root, which now includes it).
 - `packages/mobile`: `tsc --noEmit` clean (test files included); `npx vitest run` 19/19 green; `npx expo export --platform android` bundles successfully (870 modules) proving `@cap/shared` resolves and the whole module graph is valid (including the `expo-file-system` byte-upload path); web export bundles (542 modules).
-- Web app migrated: `tsc -b` clean, `vitest run` 153/153 green, `vite build` succeeds, `npm run lint` clean (excluding the self-contained mobile dirs).
+- Web app migrated: `tsc -b` clean, `vitest run` 154/154 green (includes a new shared-adapter retry test for transient transport failures via the web re-export surface), `vite build` succeeds, `npm run lint` clean (excluding the self-contained mobile dirs).
 
 ### Next steps
 

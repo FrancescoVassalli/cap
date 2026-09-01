@@ -126,6 +126,16 @@ export function createSubmissionService(
 }
 
 /**
+ * Upper bound on the POST /intakes transport attempts. The request is
+ * idempotent server-side (the backend gates the `Idempotency-Key`), so a
+ * retried request cannot create duplicates. We retry ONLY on transport-level
+ * failure — never on an HTTP response, which is a definitive server answer
+ * (including 5xx, which the backend owns).
+ */
+const MAX_NETWORK_ATTEMPTS = 2
+const NETWORK_RETRY_DELAY_MS = 400
+
+/**
  * Production-shaped adapter mapping the application payload to the backend
  * contract. It builds the flat, URL-encoded EveryAction body through the shared
  * `buildEveryActionMeta` / `toEveryActionBody` / `buildUrlEncoded` pipeline —
@@ -157,17 +167,25 @@ export class ApiSubmissionService implements SubmissionService {
     )
     const body = buildUrlEncoded(toEveryActionBody(payload, meta))
 
-    let response: Response
-    try {
-      response = await this.fetchImpl(`${this.baseUrl}/intakes`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-          'Idempotency-Key': payload.intakeId,
-        },
-        body,
-      })
-    } catch {
+    let response: Response | undefined
+    for (let attempt = 0; attempt < MAX_NETWORK_ATTEMPTS; attempt += 1) {
+      try {
+        response = await this.fetchImpl(`${this.baseUrl}/intakes`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+            'Idempotency-Key': payload.intakeId,
+          },
+          body,
+        })
+        break
+      } catch {
+        if (attempt < MAX_NETWORK_ATTEMPTS - 1) {
+          await new Promise((resolve) => setTimeout(resolve, NETWORK_RETRY_DELAY_MS))
+        }
+      }
+    }
+    if (!response) {
       throw new SubmissionError('networkError', 'Could not connect to the service.')
     }
 
