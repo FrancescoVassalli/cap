@@ -14,7 +14,10 @@
     "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "org.cohealthinitiative.cap"
+      "bundleIdentifier": "org.cohealthinitiative.cap",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Take a photo of a document to include it with your consumer assistance request."
+      }
     },
     "android": {
       "package": "org.cohealthinitiative.cap",
@@ -23,6 +26,10 @@
         "backgroundColor": "#1f4e79"
       }
     },
-    "plugins": ["expo-secure-store", "expo-document-picker"]
+    "plugins": [
+      "expo-secure-store",
+      "expo-document-picker",
+      ["expo-image-picker", { "cameraPermission": "The app uses the camera to take a photo of a document for your consumer assistance request." }]
+    ]
   }
 }

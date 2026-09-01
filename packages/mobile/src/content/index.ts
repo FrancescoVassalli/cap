@@ -69,6 +69,8 @@ export type MobileContent = {
       examplesHeading: string
       exampleItems: string[]
       chooseFiles: string
+      takePhoto: string
+      cameraPermissionDenied: string
       remove: string
       skipLabel: string
       skipButtonLabel: string
@@ -262,6 +264,9 @@ export const en: MobileContent = {
         'Other relevant documents',
       ],
       chooseFiles: 'Choose files',
+      takePhoto: 'Take a photo',
+      cameraPermissionDenied:
+        'Camera access is needed to take a photo. You can choose an existing file instead.',
       remove: 'Remove',
       skipLabel: 'You can skip this step and provide documents later.',
       skipButtonLabel: 'Skip this step',
@@ -461,6 +466,9 @@ export const es: MobileContent = {
         'Otros documentos relevantes',
       ],
       chooseFiles: 'Elegir archivos',
+      takePhoto: 'Tomar una foto',
+      cameraPermissionDenied:
+        'Se necesita acceso a la cámara para tomar una foto. Puede elegir un archivo existente en su lugar.',
       remove: 'Quitar',
       skipLabel: 'Puede saltar este paso y proporcionar documentos después.',
       skipButtonLabel: 'Saltar este paso',

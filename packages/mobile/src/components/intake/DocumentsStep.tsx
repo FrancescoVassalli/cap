@@ -16,7 +16,7 @@ import { StepBody } from '../StepBody'
 import { Button } from '../Button'
 import { getContent } from '../../context/ContentContext'
 import { useDocumentUris } from '../../context/DocumentUrisContext'
-import { pickDocuments } from '../../services/documentPicker'
+import { pickDocuments, takePhoto, type PickedDocument } from '../../services/documentPicker'
 import { theme } from '../../theme'
 
 export function DocumentsStep() {
@@ -30,7 +30,21 @@ export function DocumentsStep() {
     setErrorsList([])
     const picked = await pickDocuments()
     if (picked.length === 0) return
+    await addPickedDocuments(picked)
+  }
 
+  const handleTakePhoto = async () => {
+    setErrorsList([])
+    const result = await takePhoto()
+    if (result.status === 'canceled') return
+    if (result.status === 'permission-denied') {
+      setErrorsList([doc.cameraPermissionDenied])
+      return
+    }
+    await addPickedDocuments([result.document])
+  }
+
+  const addPickedDocuments = async (picked: PickedDocument[]) => {
     const candidates = picked.map((p) => ({ name: p.name, size: p.size, type: p.type }))
     const result = validateDocumentCandidates(candidates, values.documents, content.intakeForm.errors)
     setErrorsList(result.errors)
@@ -90,6 +104,14 @@ export function DocumentsStep() {
         variant="secondary"
         onPress={handleChooseFiles}
         fullWidth={false}
+      />
+
+      <Button
+        label={doc.takePhoto}
+        variant="ghost"
+        onPress={handleTakePhoto}
+        fullWidth={false}
+        accessibilityHint={doc.cameraPermissionDenied}
       />
 
       {values.documents.length > 0 ? (
