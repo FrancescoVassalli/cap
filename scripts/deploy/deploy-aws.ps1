@@ -14,7 +14,9 @@
   Deploy the static frontend to S3 (build + sync + optional CloudFront invalidation).
 
 .PARAMETER Api
-  Deploy a packaged Lambda/API artifact (package-api.ps1 output).
+  Deploy a packaged Lambda/API artifact (package-api.ps1 output). Updates the
+  function code if the Lambda already exists; otherwise creates the function
+  (runtime nodejs20.x, handler handler.handler) using CAP_LAMBDA_ROLE_ARN.
 
 .PARAMETER Check
   Validate env vars, AWS CLI, auth, and per-deployable IAM permissions without
@@ -173,6 +175,16 @@ function Test-CloudFrontList {
         $ErrorActionPreference = $previous
     }
 }
+function Test-LambdaFunctionExists([string]$fn) {
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $null = & aws lambda get-function --function-name $fn --region $Region 2>$null
+        return ($LASTEXITCODE -eq 0)
+    } finally {
+        $ErrorActionPreference = $previous
+    }
+}
 
 # ---------------------------------------------------------------------------
 # Preflight / check path
@@ -309,20 +321,41 @@ if ($Api) {
     }
 
     if (-not [string]::IsNullOrWhiteSpace($ApiPackage)) {
-        if ($DryRun) {
-            Get-Step 'Dry run: API package'
-            Write-Host "aws lambda update-function-code --function-name $ApiFunction --zip-file $ApiPackage"
-            exit 0
-        }
         if ([string]::IsNullOrWhiteSpace($ApiFunction)) {
             Get-Err 'A Lambda function name is required when using an API package zip file (-ApiFunction).'
         }
         if (-not (Test-Path -LiteralPath $ApiPackage)) {
             Get-Err "API package not found: $ApiPackage. Run scripts/deploy/package-api.ps1 first."
         }
-        Get-Step 'Updating Lambda function code'
-        Invoke-Aws @('lambda','update-function-code','--function-name',$ApiFunction,'--zip-file',('fileb://' + $ApiPackage),'--region',$Region,'--output','json') | Out-Null
-        Write-Host "Lambda code updated for $ApiFunction."
+        $functionExists = Test-LambdaFunctionExists $ApiFunction
+        $execRole = $env:CAP_LAMBDA_ROLE_ARN
+
+        if ($DryRun) {
+            Get-Step 'Dry run: API package'
+            if ($functionExists) {
+                Write-Host "aws lambda update-function-code --function-name $ApiFunction --zip-file $ApiPackage"
+            } else {
+                $roleDisplay = if ([string]::IsNullOrWhiteSpace($execRole)) { '<CAP_LAMBDA_ROLE_ARN>' } else { $execRole }
+                Write-Host "aws lambda create-function --function-name $ApiFunction --runtime nodejs20.x --handler handler.handler --role $roleDisplay --zip-file $ApiPackage"
+                if ([string]::IsNullOrWhiteSpace($execRole)) {
+                    Get-Warn 'CAP_LAMBDA_ROLE_ARN is not set; the create-function path will refuse to run without it.'
+                }
+            }
+            exit 0
+        }
+
+        if ($functionExists) {
+            Get-Step 'Updating Lambda function code'
+            Invoke-Aws @('lambda','update-function-code','--function-name',$ApiFunction,'--zip-file',('fileb://' + $ApiPackage),'--region',$Region,'--output','json') | Out-Null
+            Write-Host "Lambda code updated for $ApiFunction."
+        } else {
+            if ([string]::IsNullOrWhiteSpace($execRole)) {
+                Get-Err 'The Lambda function does not exist and CAP_LAMBDA_ROLE_ARN is not set. An execution role ARN is required to create it (admin-provided, or via iam:CreateRole/iam:PassRole grants).'
+            }
+            Get-Step 'Creating Lambda function'
+            Invoke-Aws @('lambda','create-function','--function-name',$ApiFunction,'--runtime','nodejs20.x','--handler','handler.handler','--role',$execRole,'--zip-file',('fileb://' + $ApiPackage),'--region',$Region,'--output','json') | Out-Null
+            Write-Host "Lambda function created for $ApiFunction."
+        }
     } else {
         Write-Host 'API deploy is configured but no package path was provided. This script requires an archive produced by package-api.ps1.'
         Write-Host 'Run: powershell -ExecutionPolicy Bypass -File scripts/deploy/package-api.ps1'

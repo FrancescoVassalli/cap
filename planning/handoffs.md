@@ -117,16 +117,28 @@ documented below so an administrator can unlock the remaining layers.
 
 Net: the admin policy update unblocks **nothing new** for API deployment — Lambda deployment is still blocked at the same two gates (execution role + API Gateway), and the frontend CDN/CloudFront layer is still unprovisioned. If the policy was intended to add `iam:CreateRole`/`apigateway:*`, it is not effective on the credentials in `C:\Development\cap\cap\.env`.
 
+**Re-verified 2026-09-01 after the admin added `AWSLambdaBasicExecutionRole`: the execution-role gate is STILL closed.**
+- `.env`/`.env.local` contain **no `CAP_LAMBDA_ROLE_ARN`** (the only ARN present is `AWS_ARN=arn:aws:iam::590251390266:user/cap-agent`, the user's own ARN). The ARN was reported as added but is not in the env files under any role-like key.
+- `iam:ListRoles` still shows **only the three service-linked roles** — no execution role exists in the account, so there is nothing to set `CAP_LAMBDA_ROLE_ARN` to even if the key were present.
+- `iam:CreateRole` probe (`cap-lambda-perm-probe-3`) is **still DENIED**, so the session cannot self-provision a role. Attaching the `AWSLambdaBasicExecutionRole` managed policy to the `cap-agent` *user* would not help either — Lambda requires an execution *role* with `lambda.amazonaws.com` in its trust policy that the deployer can pass.
+- Net: the Lambda still cannot be created. The next real step is for the admin to share the actual **role ARN** (a role that exists in the account) so it can be placed in `.env` as `CAP_LAMBDA_ROLE_ARN`.
+
 **Deploy tooling upgraded this round (2026-09-01)**
 - `deploy-aws.ps1 -Check` now probes the real deployment gates instead of stopping at `lambda:ListFunctions`: it reports Lambda reachability, the **execution-role gate** (whether `CAP_LAMBDA_ROLE_ARN` is set and verified via `iam:GetRole`), **API Gateway access** (v1/v2 read probe), **CloudFront distribution presence**, and S3 bucket access. This means an admin can re-run `-Check` after each policy change and immediately see which layer opened up.
+- `deploy-aws.ps1 -Api` now supports the full **create-or-update** Lambda lifecycle: if `$ApiFunction` already exists it runs `update-function-code`, otherwise it runs `create-function` (runtime `nodejs20.x`, handler `handler.handler`) using `CAP_LAMBDA_ROLE_ARN` and refuses the create path when the ARN is missing. Verified in `-DryRun` for both the role-set and role-missing cases.
 - `deploy-aws.ps1` now **refuses to sync the frontend (`--delete`) into a bucket resolved from `S3_BUCKET_NAME`** unless an explicit `-FrontendBucket`/`CAP_FRONTEND_BUCKET` is given — the fallback points at the backend documents bucket (`cap1-casedocs-…`), and a bare `-Frontend` run could have wiped case documents. Set `CAP_FRONTEND_BUCKET=cap-frontend-590251390266-us-east-2-an` in the deploy environment.
 - Note: `planning/deployment-infrastructure.md` (referenced for the CloudFront distribution config/OAC rollout) does not exist in the repo — recreate it with the distribution config when CloudFront is unblocked, so `CAP_CLOUDFRONT_DISTRIBUTION_ID`/OAC setup has a single source of truth.
 
 **Blockers needing an administrator (permissions verified against the live account after the policy update)**
 - Lambda deploy: `lambda:CreateFunction` **is** allowed, but `iam:CreateRole` is **denied**,
   so no Lambda execution role can be created by this session. A functioning Lambda requires
-  a role (or an `iam:CreateRole`/`iam:PassRole` grant). Set `CAP_LAMBDA_ROLE_ARN` to an
-  admin-provisioned execution role to let the API path create/update the function.
+  a role (or an `iam:CreateRole`/`iam:PassRole` grant). **The key fact:** the admin-added
+  `AWSLambdaBasicExecutionRole` did not create a role — no role exists in the account and no
+  `CAP_LAMBDA_ROLE_ARN` was written to `.env`. The admin must share the **actual role ARN** of
+  a role that exists (i.e. one created with `lambda.amazonaws.com` in its trust policy and the
+  `AWSLambdaBasicExecutionRole` managed policy attached), and it must be written to `.env` as
+  `CAP_LAMBDA_ROLE_ARN=arn:aws:iam::<account>:role/<name>` (unquoted value or same quoting as
+  the existing keys).
 - API Gateway: `apigateway:*` is **denied**, so no public HTTP API endpoint can be created.
 - CloudFront: `cloudfront:CreateDistribution` is blocked by **account verification** (AWS
   support must verify the account before adding new distributions). The earlier OAC
@@ -135,10 +147,12 @@ Net: the admin policy update unblocks **nothing new** for API deployment — Lam
   once the account is verified.
 
 **Next steps (for an AWS administrator or a broadened IAM policy)**
-1. Grant `iam:CreateRole` + `iam:PassRole` + `lambda:CreateFunction` (or pre-provision an
-   execution role and set `CAP_LAMBDA_ROLE_ARN`), then run `deploy-aws.ps1 -Api`. Re-run
-   `deploy-aws.ps1 -Check` after the grant — the `API (execution role)` line will flip to
-   a confirmed role and the API path will stop reporting `MISSING`.
+1. Provide a real Lambda execution role ARN and put it in `.env` as `CAP_LAMBDA_ROLE_ARN`
+   (e.g. `arn:aws:iam::590251390266:role/cap-lambda-execution-role`), or grant
+   `iam:CreateRole` + `iam:PassRole` + `lambda:CreateFunction`; then run
+   `deploy-aws.ps1 -Api` — the tool now creates the function if it does not exist.
+   Re-run `deploy-aws.ps1 -Check` after the role is set: the `API (execution role)` line
+   flips to `OK` and the API path stops reporting `MISSING`.
 2. Verify the AWS account for CloudFront, then create the distribution with OAC
    `cap-frontend-oac` (config to be recorded in the re-created deployment-infrastructure
    plan) and set `CAP_CLOUDFRONT_DISTRIBUTION_ID`; `deploy-aws.ps1 -Frontend` will then
