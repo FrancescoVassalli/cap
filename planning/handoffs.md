@@ -90,7 +90,9 @@ documented below so an administrator can unlock the remaining layers.
   (the bash original is Unix-only and will not run on this Windows machine). Same CLI
   surface (`-Check`, `-DryRun`, `-Frontend`, `-Api`, `-Region`, `-FrontendBucket`,
   `-CloudFrontId`, `-ApiFunction`, `-ApiPackage`, `-FrontendDir`), plus a per-deployable
-  IAM permission preflight so `-Check` reports exactly which layers are reachable.
+  IAM permission preflight so `-Check` reports exactly which layers are reachable
+  (Lambda, execution role, API Gateway v1/v2, CloudFront, S3) and a guard that refuses
+  a frontend `--delete` sync into the backend documents bucket.
 - `scripts/deploy/package-api.ps1` — builds the backend (`npm run build:api`) and zips a
   self-contained Lambda artifact to `dist-lambda/cap-api.zip` (handler `handler.handler`).
 - `backend/src/handler.ts` — production Lambda entrypoint wiring
@@ -105,17 +107,22 @@ documented below so an administrator can unlock the remaining layers.
   extracted zip returns `200 {"status":"ok"}` on `/health` and a signed S3 presigned URL
   on the upload-url route (local vendor `dist` was cleaned).
 
-**Re-verified on 2026-09-01 (live `cap-agent` session, account 590251390266, us-east-2): the Lambda blockers are NOT resolved.** Direct API probes against the account confirm exactly which gates remain:
+**Re-verified on 2026-09-01, after an admin IAM policy update (live `cap-agent` session, account 590251390266, us-east-2): the Lambda blockers are NOT resolved.** The admin-issued policy was applied and re-probed from the current `cap-agent` credentials (`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` from the gitignored `.env`). Live probes confirm exactly which gates remain:
 - `lambda:CreateFunction` **is still allowed** (a probe create fails only on role validation, i.e. `InvalidParameterValueException: The role defined for the function cannot be assumed by Lambda` — no resource was created).
 - `lambda:ListFunctions` **is allowed** and returns `[]` — no Lambda function exists; an administrator has not pre-created one.
-- `iam:CreateRole` **is still DENIED** (a temporary `cap-lambda-perm-probe` role was refused with `AccessDenied`; nothing was created). `iam:ListRoles`/`iam:GetRole` are allowed, but the only roles in the account are AWS service-linked roles (Resource Explorer, Support, Trusted Advisor) — there is **no Lambda execution role** to pass, and `CAP_LAMBDA_ROLE_ARN` is not set anywhere.
-- API Gateway is **still fully DENIED** (`apigateway:GET` denied on both `get-rest-apis` and `apigatewayv2:get-apis`), so no public HTTPS endpoint can be created even if a Lambda existed.
-- CloudFront: `cloudfront:ListDistributions` is allowed, but the account has **zero distributions**, and the OAC `cap-frontend-oac` (`E1EMZ30G5M3VFD`) recorded earlier **no longer exists** — the CDN layer has not been provisioned.
+- `iam:CreateRole` **is still DENIED** (a temporary `cap-lambda-perm-probe-2` role was refused with `AccessDenied`; nothing was created). `iam:GetRole`/`iam:ListRoles` are allowed, but `GetRole` probes for ten plausible execution-role names (`cap-lambda-execution-role`, `cap-api-execution-role`, …) all return `NoSuchEntity` — there is **no Lambda execution role** to pass, and `CAP_LAMBDA_ROLE_ARN` is not set anywhere.
+- API Gateway is **still fully DENIED**: `apigateway:GET` is denied on both `get-rest-apis` (v1) and `apigatewayv2:get-apis`, and `apigateway:POST` is denied on `create-api` — no public HTTPS endpoint can be created even if a Lambda existed.
+- CloudFront: `cloudfront:ListDistributions`/`ListCloudFrontOriginAccessIdentities` are allowed, but the account has **zero distributions**, and the OAC `cap-frontend-oac` (`E1EMZ30G5M3VFD`) recorded earlier **no longer exists** — the CDN layer has not been provisioned.
 - S3 is unaffected: both buckets (`cap-frontend-590251390266-us-east-2-an`, `cap1-casedocs-590251390266-us-east-2-an`) are present.
 
-Net: Lambda deployment is still blocked at the same two gates (execution role + API Gateway), and the frontend CDN/CloudFront layer is also still unprovisioned.
+Net: the admin policy update unblocks **nothing new** for API deployment — Lambda deployment is still blocked at the same two gates (execution role + API Gateway), and the frontend CDN/CloudFront layer is still unprovisioned. If the policy was intended to add `iam:CreateRole`/`apigateway:*`, it is not effective on the credentials in `C:\Development\cap\cap\.env`.
 
-**Blockers needing an administrator (permissions verified against the live account)**
+**Deploy tooling upgraded this round (2026-09-01)**
+- `deploy-aws.ps1 -Check` now probes the real deployment gates instead of stopping at `lambda:ListFunctions`: it reports Lambda reachability, the **execution-role gate** (whether `CAP_LAMBDA_ROLE_ARN` is set and verified via `iam:GetRole`), **API Gateway access** (v1/v2 read probe), **CloudFront distribution presence**, and S3 bucket access. This means an admin can re-run `-Check` after each policy change and immediately see which layer opened up.
+- `deploy-aws.ps1` now **refuses to sync the frontend (`--delete`) into a bucket resolved from `S3_BUCKET_NAME`** unless an explicit `-FrontendBucket`/`CAP_FRONTEND_BUCKET` is given — the fallback points at the backend documents bucket (`cap1-casedocs-…`), and a bare `-Frontend` run could have wiped case documents. Set `CAP_FRONTEND_BUCKET=cap-frontend-590251390266-us-east-2-an` in the deploy environment.
+- Note: `planning/deployment-infrastructure.md` (referenced for the CloudFront distribution config/OAC rollout) does not exist in the repo — recreate it with the distribution config when CloudFront is unblocked, so `CAP_CLOUDFRONT_DISTRIBUTION_ID`/OAC setup has a single source of truth.
+
+**Blockers needing an administrator (permissions verified against the live account after the policy update)**
 - Lambda deploy: `lambda:CreateFunction` **is** allowed, but `iam:CreateRole` is **denied**,
   so no Lambda execution role can be created by this session. A functioning Lambda requires
   a role (or an `iam:CreateRole`/`iam:PassRole` grant). Set `CAP_LAMBDA_ROLE_ARN` to an
@@ -124,18 +131,24 @@ Net: Lambda deployment is still blocked at the same two gates (execution role + 
 - CloudFront: `cloudfront:CreateDistribution` is blocked by **account verification** (AWS
   support must verify the account before adding new distributions). The earlier OAC
   `cap-frontend-oac` (`E1EMZ30G5M3VFD`) is no longer present in the account; recreate it per
-  the distribution config/rollout note in `planning/deployment-infrastructure.md` once the
-  account is verified.
+  the distribution config/rollout note to be re-created in `planning/deployment-infrastructure.md`
+  once the account is verified.
 
 **Next steps (for an AWS administrator or a broadened IAM policy)**
 1. Grant `iam:CreateRole` + `iam:PassRole` + `lambda:CreateFunction` (or pre-provision an
-   execution role and set `CAP_LAMBDA_ROLE_ARN`), then run `deploy-aws.ps1 -Api`.
+   execution role and set `CAP_LAMBDA_ROLE_ARN`), then run `deploy-aws.ps1 -Api`. Re-run
+   `deploy-aws.ps1 -Check` after the grant — the `API (execution role)` line will flip to
+   a confirmed role and the API path will stop reporting `MISSING`.
 2. Verify the AWS account for CloudFront, then create the distribution with OAC
-   `cap-frontend-oac` (config in the deployment-infrastructure plan) and set
-   `CAP_CLOUDFRONT_DISTRIBUTION_ID`; `deploy-aws.ps1 -Frontend` will then invalidate it.
+   `cap-frontend-oac` (config to be recorded in the re-created deployment-infrastructure
+   plan) and set `CAP_CLOUDFRONT_DISTRIBUTION_ID`; `deploy-aws.ps1 -Frontend` will then
+   invalidate it.
 3. Grant `apigatewayv2:*` (or REST API) to expose the Lambda behind a public HTTPS URL and
    point `VITE_CAP_API_BASE_URL` / `CAP_API_BASE_URL` at it.
 4. Confirm `CAP_ALLOWED_ORIGINS` to the exact static-host origin before public release.
+5. Set `CAP_FRONTEND_BUCKET=cap-frontend-590251390266-us-east-2-an` in the deploy
+   environment so the frontend deploy targets the static-host bucket (the documents-bucket
+   guard makes this mandatory for a non-`-DryRun` `-Frontend` run).
 
 ## react-native-app — mobile app implementation
 

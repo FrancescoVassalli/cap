@@ -18,7 +18,9 @@
 
 .PARAMETER Check
   Validate env vars, AWS CLI, auth, and per-deployable IAM permissions without
-  changing AWS.
+  changing AWS. Reports Lambda reachability, the execution-role gate
+  (CAP_LAMBDA_ROLE_ARN, or the iam:CreateRole option), API Gateway access
+  (v1/v2 read probe), CloudFront distribution presence, and S3 bucket access.
 
 .PARAMETER DryRun
   Print the planned actions without executing them.
@@ -67,6 +69,7 @@ function Get-Warn([string]$msg) { Write-Host "warn: $msg" -ForegroundColor Yello
 function Get-Err([string]$msg) { Write-Host "ERROR: $msg" -ForegroundColor Red; exit 1 }
 
 # ---- Resolve environment configuration (env wins unless overridden by flags) ----
+$FrontendBucketExplicit = -not [string]::IsNullOrWhiteSpace($FrontendBucket)
 if ([string]::IsNullOrWhiteSpace($Region))     { $Region = if ($env:AWS_REGION) { $env:AWS_REGION } elseif ($env:AWS_DEFAULT_REGION) { $env:AWS_DEFAULT_REGION } else { 'us-east-2' } }
 if ([string]::IsNullOrWhiteSpace($FrontendBucket)) { $FrontendBucket = if ($env:CAP_FRONTEND_BUCKET) { $env:CAP_FRONTEND_BUCKET } else { $env:S3_BUCKET_NAME } }
 if ([string]::IsNullOrWhiteSpace($CloudFrontId))    { $CloudFrontId = $env:CAP_CLOUDFRONT_DISTRIBUTION_ID }
@@ -124,6 +127,52 @@ function Test-LambdaAccess {
     $null = & aws lambda list-functions --region $Region 2>$null
     return ($LASTEXITCODE -eq 0)
 }
+function Test-ApiGatewayAccess {
+    # Read gate for the public HTTP API layer. Both v1 (REST) and v2 (HTTP) are
+    # probed so -Check can distinguish "endpoints can be created" from "denied".
+    # The temporary 'Continue' guard keeps an AccessDenied (stderr) from becoming
+    # a terminating NativeCommandError under this script's 'Stop' preference.
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $null = & aws apigatewayv2 get-apis --region $Region 2>$null
+        $v2 = ($LASTEXITCODE -eq 0)
+        $null = & aws apigateway get-rest-apis --region $Region 2>$null
+        $v1 = ($LASTEXITCODE -eq 0)
+        return ($v2 -or $v1)
+    } finally {
+        $ErrorActionPreference = $previous
+    }
+}
+function Get-LambdaExecRoleStatus {
+    # Reports whether a Lambda execution role is available for create/update:
+    # an explicitly configured CAP_LAMBDA_ROLE_ARN (verified via iam:GetRole)
+    # or the ability to create one. iam:GetRole is a safe read probe.
+    $roleArn = $env:CAP_LAMBDA_ROLE_ARN
+    if ([string]::IsNullOrWhiteSpace($roleArn)) {
+        return 'MISSING - set CAP_LAMBDA_ROLE_ARN to a Lambda execution role (or obtain iam:CreateRole + iam:PassRole)'
+    }
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $roleName = ($roleArn -split '/')[-1]
+        $null = & aws iam get-role --role-name $roleName 2>$null
+        if ($LASTEXITCODE -eq 0) { return "OK - $roleArn" }
+        return "NOT CONFIRMED - cannot verify $roleArn (iam:GetRole denied or role not found)"
+    } finally {
+        $ErrorActionPreference = $previous
+    }
+}
+function Test-CloudFrontList {
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $null = & aws cloudfront list-distributions --query 'DistributionList.Items[].Id' --output text 2>$null
+        return ($LASTEXITCODE -eq 0)
+    } finally {
+        $ErrorActionPreference = $previous
+    }
+}
 
 # ---------------------------------------------------------------------------
 # Preflight / check path
@@ -146,24 +195,49 @@ if ($Check -or $DryRun) {
     # whole environment, regardless of which deployable switches were passed.
     $s3ok = Test-S3Access $FrontendBucket
     $lambdaOk = Test-LambdaAccess
+    $apiGwOk = $false
+    $cfOk = $false
     if ($Frontend -or $Check) {
         Write-Host ("  frontend (S3 bucket '{0}'):   {1}" -f $FrontendBucket, $(if ($s3ok) { 'OK - writable' } else { 'BLOCKED - cannot reach bucket' }))
         if (-not $s3ok) {
             if ([string]::IsNullOrWhiteSpace($FrontendBucket)) { Get-Warn 'No frontend bucket configured (set CAP_FRONTEND_BUCKET or S3_BUCKET_NAME or -FrontendBucket).' }
             else { Get-Warn 'The AWS session cannot access the frontend bucket. The frontend deploy cannot run.' }
         }
+        if (-not $FrontendBucketExplicit -and $FrontendBucket -eq $env:S3_BUCKET_NAME -and -not [string]::IsNullOrWhiteSpace($FrontendBucket)) {
+            Get-Warn "'$FrontendBucket' was resolved from S3_BUCKET_NAME, which is the backend documents bucket. Set CAP_FRONTEND_BUCKET (or pass -FrontendBucket) to the static-host bucket before a real frontend deploy."
+        }
+        $cfOk = Test-CloudFrontList
+        if ($cfOk) {
+            # --output text prints a literal 'None' when the query result is null
+            # (zero distributions), so guard against counting it as a distribution.
+            $distIds = (& aws cloudfront list-distributions --query 'DistributionList.Items[].Id' --output text 2>$null)
+            $distCount = 0
+            if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($distIds) -and $distIds.Trim() -ne 'None') {
+                $distCount = ($distIds.Trim() -split '\s+').Count
+            }
+            Write-Host ('  frontend (CloudFront):          OK - {0} distribution(s) present' -f $distCount)
+            if ([string]::IsNullOrWhiteSpace($CloudFrontId)) { Get-Warn 'CAP_CLOUDFRONT_DISTRIBUTION_ID is not set; the CloudFront invalidation step will be skipped.' }
+        } else {
+            Write-Host '  frontend (CloudFront):          BLOCKED - no cloudfront:ListDistributions permission'
+        }
     }
     if ($Api -or $Check) {
-        Write-Host ('  API (Lambda):                    ' + $(if ($lambdaOk) { 'OK - reachable (needs an IAM execution role; see CAP_LAMBDA_ROLE_ARN)' } else { 'BLOCKED - no lambda:ListFunctions permission' }))
+        $roleStatus = Get-LambdaExecRoleStatus
+        $apiGwOk = Test-ApiGatewayAccess
+        Write-Host ('  API (Lambda):                    ' + $(if ($lambdaOk) { 'OK - reachable' } else { 'BLOCKED - no lambda:ListFunctions permission' }))
+        Write-Host ('  API (execution role):           ' + $roleStatus)
+        Write-Host ('  API (API Gateway):              ' + $(if ($apiGwOk) { 'OK - endpoint layer reachable' } else { 'BLOCKED - apigateway:GET/POST denied on v1 & v2' }))
         if (-not $lambdaOk) { Get-Warn 'The AWS session cannot manage Lambda. The API deploy cannot run until the IAM user/role gains Lambda + API Gateway permissions.' }
-        elseif ([string]::IsNullOrWhiteSpace(($env:CAP_LAMBDA_ROLE_ARN))) { Get-Warn 'CAP_LAMBDA_ROLE_ARN is not set. The Lambda needs an execution role ARN (pre-provisioned by an administrator, or set once iam:CreateRole is available).' }
+        if ($lambdaOk -and -not $apiGwOk) { Get-Warn 'API Gateway is not accessible. No public HTTPS endpoint can be created for the API until apigateway permissions are granted.' }
     }
 
     if ($Check) {
         Write-Host ''
         if (-not $s3ok) { Get-Warn 'Frontend preflight NOT ready (S3 access blocked).' }
         if (-not $lambdaOk) { Get-Warn 'API preflight NOT ready (Lambda access blocked).' }
-        if ($s3ok -or $lambdaOk) {
+        if ($lambdaOk -and -not $apiGwOk) { Get-Warn 'API preflight NOT ready (API Gateway blocked).' }
+        if (-not $cfOk) { Get-Warn 'Frontend preflight NOT ready (CloudFront list denied).' }
+        if ($s3ok -or $lambdaOk -or $cfOk) {
             Write-Host 'Preflight checks ran. No build or AWS actions were executed.' -ForegroundColor Green
         }
         exit 0
@@ -176,6 +250,9 @@ if ($Check -or $DryRun) {
 if ($Frontend) {
     if ([string]::IsNullOrWhiteSpace($FrontendBucket)) {
         Get-Err 'A frontend bucket is required. Set CAP_FRONTEND_BUCKET or S3_BUCKET_NAME, or pass -FrontendBucket.'
+    }
+    if (-not $FrontendBucketExplicit -and $env:S3_BUCKET_NAME -and $FrontendBucket -eq $env:S3_BUCKET_NAME) {
+        Get-Err "Refusing to sync the frontend into '$FrontendBucket' because it was resolved from S3_BUCKET_NAME (the backend documents bucket). Pass -FrontendBucket or set CAP_FRONTEND_BUCKET to the static-host bucket so a '--delete' sync can never touch case documents."
     }
     if (-not (Test-S3Access $FrontendBucket)) {
         Get-Err "The AWS session cannot access the frontend bucket '$FrontendBucket'. Cannot deploy the frontend."
