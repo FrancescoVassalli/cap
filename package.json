@@ -13,6 +13,7 @@
     "test:backend": "vitest run backend/test",
     "server": "tsc -p backend/tsconfig.build.json && node backend/dist/index.js --serve",
     "build:api": "tsc -p backend/tsconfig.build.json",
+    "build:api:lambda": "tsc -p backend/tsconfig.lambda.json",
     "deploy:check": "powershell -ExecutionPolicy Bypass -File scripts/deploy/deploy-aws.ps1 -Check",
     "deploy:frontend": "powershell -ExecutionPolicy Bypass -File scripts/deploy/deploy-aws.ps1 -Frontend",
     "deploy:api": "powershell -ExecutionPolicy Bypass -File scripts/deploy/deploy-aws.ps1 -Api",

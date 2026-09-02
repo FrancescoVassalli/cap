@@ -20,7 +20,10 @@ param(
 $ErrorActionPreference = 'Stop'
 # Resolve repo root = directory that contains package.json (this script's parent's parent).
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
-$BackendDist = Join-Path $RepoRoot 'backend\dist'
+# Lambda packages the CommonJS build (backend/tsconfig.lambda.json), because the
+# nodejs20.x runtime can only load a CommonJS .js handler. An ESM .js handler fails
+# with ERR_REQUIRE_ESM and a .mjs handler fails with Runtime.HandlerNotFound.
+$BackendDist = Join-Path $RepoRoot 'backend\dist-lambda-cjs'
 $Staging = Join-Path $RepoRoot 'dist-lambda\staging'
 $OutDirFallback = Join-Path $RepoRoot 'dist-lambda'
 
@@ -35,16 +38,16 @@ function Write-Err([string]$msg) { Write-Host "ERROR: $msg" -ForegroundColor Red
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) { Write-Err 'node is required.' }
 if (-not (Get-Command npm -ErrorAction SilentlyContinue)) { Write-Err 'npm is required.' }
 
-# 1. Compile the backend TypeScript to ES modules.
+# 1. Compile the backend TypeScript to CommonJS for Lambda.
 if (-not $SkipBuild) {
-    Write-Step 'Compiling backend (tsc -p backend/tsconfig.build.json)'
+    Write-Step 'Compiling backend (tsc -p backend/tsconfig.lambda.json -> CommonJS)'
     Push-Location $RepoRoot
-    try { & npm run build:api } finally { Pop-Location }
+    try { & npm run build:api:lambda } finally { Pop-Location }
     if ($LASTEXITCODE -ne 0) { Write-Err "backend build failed (exit $LASTEXITCODE)." }
 }
 
 if (-not (Test-Path (Join-Path $BackendDist 'handler.js'))) {
-    Write-Err "Compiled Lambda entrypoint not found at backend\dist\handler.js. Run the build first."
+    Write-Err "Compiled Lambda entrypoint not found at backend\dist-lambda-cjs\handler.js. Run the build first."
 }
 
 # 2. Reset the staging directory.
@@ -56,7 +59,10 @@ New-Item -ItemType Directory -Force -Path $Staging | Out-Null
 Copy-Item -Path (Join-Path $BackendDist '*') -Destination $Staging -Recurse -Force
 
 # 4. Emit a minimal package.json so `npm install --omit=dev` fetches only the
-#    runtime AWS SDK dependencies the handler actually needs.
+#    runtime AWS SDK dependencies the handler actually needs. The package is
+#    CommonJS (no "type":"module") so the compiled handler.js is required() by
+#    the nodejs20.x runtime exactly as a plain CJS module (which is the only
+#    handler form this runtime loads reliably).
 $runtimeDeps = @{
     '@aws-sdk/client-s3' = '*'
     '@aws-sdk/s3-request-presigner' = '*'
@@ -65,7 +71,6 @@ $pkg = [ordered]@{
     name = 'cap-api'
     version = '0.0.0'
     private = $true
-    type = 'module'
     main = 'handler.js'
     dependencies = $runtimeDeps
 }
@@ -83,23 +88,10 @@ if ($LASTEXITCODE -ne 0) { Write-Err "npm install in staging failed (exit $LASTE
 Remove-Item -Path (Join-Path $Staging 'node_modules\.bin') -Recurse -Force -ErrorAction SilentlyContinue
 Get-ChildItem -Path $Staging -Recurse -File -Filter '*.map' | ForEach-Object { Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue }
 
-# 7. Emit a .mjs wrapper for the Lambda handler. The nodejs20 runtime's loader
-#    resolves plain .js files via require() first (ERR_REQUIRE_ESM), even when a
-#    root package.json declares "type": "module". A dynamic import() from a .mjs
-#    file is the AWS-documented shim that reliably loads our ESM handler.
-#    Lambda handler string: handler.mjs.handler
-$mjs = @'
-import { handler as appHandler } from './handler.js';
-
-export const handler = async (event, context) => {
-  return appHandler(event, context);
-};
-'@
-[System.IO.File]::WriteAllText(
-    (Join-Path $Staging 'handler.mjs'),
-    $mjs,
-    (New-Object System.Text.UTF8Encoding $false)
-)
+# 7. (Removed) The Lambda handler is the plain CommonJS build at handler.js
+#    with exports.handler. A .mjs shim is unnecessary (and broken on nodejs20.x
+#    which returns Runtime.HandlerNotFound for a .mjs handler). Handler string:
+#    handler.handler
 
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 if (Test-Path $OutFile) { Remove-Item -LiteralPath $OutFile -Force }
@@ -124,4 +116,4 @@ try {
 
 $zipSizeKB = [math]::Round((Get-Item $OutFile).Length / 1KB, 1)
 Write-Host "Package created: $OutFile ($zipSizeKB KB)" -ForegroundColor Green
-Write-Host "Lambda handler:  handler.mjs.handler" -ForegroundColor Green
+Write-Host "Lambda handler:  handler.handler" -ForegroundColor Green

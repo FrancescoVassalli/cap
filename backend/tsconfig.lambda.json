@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.build.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "../node_modules/.tmp/tsconfig.backend.lambda.tsbuildinfo",
+    /* AWS Lambda nodejs20.x can only load a CommonJS .js handler (a .mjs
+       handler and an ESM .js handler both fail on this runtime). Compile the
+       Lambda artifact to CommonJS so the handler is plain
+       `exports.handler` in require() form, which the runtime loads cleanly. */
+    "module": "commonjs",
+    "moduleResolution": "node10",
+    "verbatimModuleSyntax": false,
+    "outDir": "dist-lambda-cjs"
+  },
+  "include": ["src"],
+  "exclude": ["test"]
+}

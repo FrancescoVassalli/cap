@@ -412,7 +412,7 @@ if ($Api) {
                 Write-Host "aws lambda update-function-code --function-name $ApiFunction --zip-file $ApiPackage"
             } else {
                 $roleDisplay = if ([string]::IsNullOrWhiteSpace($execRole)) { '<CAP_LAMBDA_ROLE_ARN>' } else { $execRole }
-                Write-Host "aws lambda create-function --function-name $ApiFunction --runtime nodejs20.x --handler handler.mjs.handler --role $roleDisplay --zip-file $ApiPackage --timeout 30"
+                Write-Host "aws lambda create-function --function-name $ApiFunction --runtime nodejs20.x --handler handler.handler --role $roleDisplay --zip-file $ApiPackage --timeout 30"
                 if ([string]::IsNullOrWhiteSpace($execRole)) {
                     Get-Warn 'CAP_LAMBDA_ROLE_ARN is not set; the create-function path will refuse to run without it.'
                 }
@@ -432,13 +432,13 @@ if ($Api) {
                 Get-Err 'The Lambda function does not exist and CAP_LAMBDA_ROLE_ARN is not set. An execution role ARN is required to create it (admin-provided, or via iam:CreateRole/iam:PassRole grants).'
             }
             Get-Step 'Creating Lambda function'
-            Invoke-Aws @('lambda','create-function','--function-name',$ApiFunction,'--runtime','nodejs20.x','--handler','handler.mjs.handler','--role',$execRole,'--zip-file',('fileb://' + $ApiPackage),'--timeout','30','--region',$Region,'--output','json') | Out-Null
+            Invoke-Aws @('lambda','create-function','--function-name',$ApiFunction,'--runtime','nodejs20.x','--handler','handler.handler','--role',$execRole,'--zip-file',('fileb://' + $ApiPackage),'--timeout','30','--region',$Region,'--output','json') | Out-Null
             Write-Host "Lambda function created for $ApiFunction."
         }
         if ($envArgs.Count -gt 0) {
             Wait-LambdaReady $ApiFunction
             Get-Step 'Applying Lambda environment configuration'
-            $base = @('lambda','update-function-configuration','--function-name',$ApiFunction,'--timeout','30','--handler','handler.mjs.handler','--region',$Region,'--output','json')
+            $base = @('lambda','update-function-configuration','--function-name',$ApiFunction,'--timeout','30','--handler','handler.handler','--region',$Region,'--output','json')
             $all = @($base) + @($envArgs)
             Invoke-Aws $all | Out-Null
             Write-Host "Lambda environment and timeout applied for $ApiFunction."

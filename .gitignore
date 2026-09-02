@@ -11,6 +11,7 @@ node_modules
 dist
 dist-ssr
 dist-lambda
+backend/dist-lambda-cjs
 *.local
 
 # Playwright
