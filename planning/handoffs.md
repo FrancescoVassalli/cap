@@ -105,6 +105,16 @@ documented below so an administrator can unlock the remaining layers.
   extracted zip returns `200 {"status":"ok"}` on `/health` and a signed S3 presigned URL
   on the upload-url route (local vendor `dist` was cleaned).
 
+**Re-verified on 2026-09-01 (live `cap-agent` session, account 590251390266, us-east-2): the Lambda blockers are NOT resolved.** Direct API probes against the account confirm exactly which gates remain:
+- `lambda:CreateFunction` **is still allowed** (a probe create fails only on role validation, i.e. `InvalidParameterValueException: The role defined for the function cannot be assumed by Lambda` — no resource was created).
+- `lambda:ListFunctions` **is allowed** and returns `[]` — no Lambda function exists; an administrator has not pre-created one.
+- `iam:CreateRole` **is still DENIED** (a temporary `cap-lambda-perm-probe` role was refused with `AccessDenied`; nothing was created). `iam:ListRoles`/`iam:GetRole` are allowed, but the only roles in the account are AWS service-linked roles (Resource Explorer, Support, Trusted Advisor) — there is **no Lambda execution role** to pass, and `CAP_LAMBDA_ROLE_ARN` is not set anywhere.
+- API Gateway is **still fully DENIED** (`apigateway:GET` denied on both `get-rest-apis` and `apigatewayv2:get-apis`), so no public HTTPS endpoint can be created even if a Lambda existed.
+- CloudFront: `cloudfront:ListDistributions` is allowed, but the account has **zero distributions**, and the OAC `cap-frontend-oac` (`E1EMZ30G5M3VFD`) recorded earlier **no longer exists** — the CDN layer has not been provisioned.
+- S3 is unaffected: both buckets (`cap-frontend-590251390266-us-east-2-an`, `cap1-casedocs-590251390266-us-east-2-an`) are present.
+
+Net: Lambda deployment is still blocked at the same two gates (execution role + API Gateway), and the frontend CDN/CloudFront layer is also still unprovisioned.
+
 **Blockers needing an administrator (permissions verified against the live account)**
 - Lambda deploy: `lambda:CreateFunction` **is** allowed, but `iam:CreateRole` is **denied**,
   so no Lambda execution role can be created by this session. A functioning Lambda requires
@@ -112,9 +122,10 @@ documented below so an administrator can unlock the remaining layers.
   admin-provisioned execution role to let the API path create/update the function.
 - API Gateway: `apigateway:*` is **denied**, so no public HTTP API endpoint can be created.
 - CloudFront: `cloudfront:CreateDistribution` is blocked by **account verification** (AWS
-  support must verify the account before adding new distributions). OAC `cap-frontend-oac`
-  (`E1EMZ30G5M3VFD`) was created and a ready-to-use distribution config/rollout note is in
-  `planning/deployment-infrastructure.md`.
+  support must verify the account before adding new distributions). The earlier OAC
+  `cap-frontend-oac` (`E1EMZ30G5M3VFD`) is no longer present in the account; recreate it per
+  the distribution config/rollout note in `planning/deployment-infrastructure.md` once the
+  account is verified.
 
 **Next steps (for an AWS administrator or a broadened IAM policy)**
 1. Grant `iam:CreateRole` + `iam:PassRole` + `lambda:CreateFunction` (or pre-provision an
