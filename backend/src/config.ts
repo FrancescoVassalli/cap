@@ -14,6 +14,14 @@ export type ApiConfig = {
   localPresignerMode: 'signed' | 'mock'
   awsBucketName?: string
   awsRegion?: string
+  /**
+   * Enables the S3 presigner without static `AWS_ACCESS_KEY_ID` /
+   * `AWS_SECRET_ACCESS_KEY` env values, relying on the SDK default credential
+   * chain instead (the Lambda execution role on AWS, ambient env elsewhere).
+   * Lambda reserves those credential keys, so serverless deployments set
+   * `CAP_S3_ROLE_CREDENTIALS=1` rather than copying secrets into the function.
+   */
+  roleBasedS3: boolean
   /** Origins the browser API is allowed to call cross-origin. `*` reflects any origin. */
   allowedOrigins: string[]
   maxBodyBytes: number
@@ -53,6 +61,7 @@ export function createConfig(
     localPresignerMode,
     awsBucketName: env['S3_BUCKET_NAME'] ?? env['CAP_S3_BUCKET_NAME'],
     awsRegion: env['AWS_REGION'] ?? env['AWS_DEFAULT_REGION'] ?? env['CAP_AWS_REGION'],
+    roleBasedS3: env['CAP_S3_ROLE_CREDENTIALS'] === '1' || env['CAP_S3_ROLE_CREDENTIALS'] === 'true',
     allowedOrigins: splitOrigins(env['CAP_ALLOWED_ORIGINS'], DEFAULT_ALLOWED_ORIGINS),
     maxBodyBytes: Number(env['CAP_MAX_BODY_BYTES'] ?? String(12 * 1024 * 1024)),
     rateLimit: {

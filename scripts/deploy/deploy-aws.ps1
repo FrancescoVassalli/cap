@@ -42,6 +42,12 @@
 .PARAMETER ApiPackage
   Path to a packaged Lambda zip artifact (default CAP_API_PACKAGE_PATH).
 
+.PARAMETER LambdaEnvFile
+  Optional JSON file with the `{"Variables":{...}}` shape to apply as the Lambda
+  environment on create and on every code/config update (default
+  CAP_LAMBDA_ENV_FILE). Keep this file gitignored — it carries runtime secrets
+  such as the S3 credentials used by the S3 presigner.
+
 .PARAMETER FrontendDir
   Frontend build directory (default: dist).
 
@@ -61,6 +67,7 @@ param(
     [string]$CloudFrontId = '',
     [string]$ApiFunction = '',
     [string]$ApiPackage = '',
+    [string]$LambdaEnvFile = '',
     [string]$FrontendDir = ''
 )
 
@@ -72,11 +79,18 @@ function Get-Err([string]$msg) { Write-Host "ERROR: $msg" -ForegroundColor Red; 
 
 # ---- Resolve environment configuration (env wins unless overridden by flags) ----
 $FrontendBucketExplicit = -not [string]::IsNullOrWhiteSpace($FrontendBucket)
+# Normalize the Lambda execution-role ARN env name: CAP_LAMBDA_ROLE_ARN is
+# canonical; AWS_LAMBDA_ROLE_ARN is accepted as an alias when the CAP_ form is
+# unset (the admin .env currently stores it under the AWS_ name).
+if ([string]::IsNullOrWhiteSpace($env:CAP_LAMBDA_ROLE_ARN) -and -not [string]::IsNullOrWhiteSpace($env:AWS_LAMBDA_ROLE_ARN)) {
+    $env:CAP_LAMBDA_ROLE_ARN = $env:AWS_LAMBDA_ROLE_ARN
+}
 if ([string]::IsNullOrWhiteSpace($Region))     { $Region = if ($env:AWS_REGION) { $env:AWS_REGION } elseif ($env:AWS_DEFAULT_REGION) { $env:AWS_DEFAULT_REGION } else { 'us-east-2' } }
 if ([string]::IsNullOrWhiteSpace($FrontendBucket)) { $FrontendBucket = if ($env:CAP_FRONTEND_BUCKET) { $env:CAP_FRONTEND_BUCKET } else { $env:S3_BUCKET_NAME } }
 if ([string]::IsNullOrWhiteSpace($CloudFrontId))    { $CloudFrontId = $env:CAP_CLOUDFRONT_DISTRIBUTION_ID }
 if ([string]::IsNullOrWhiteSpace($ApiFunction))     { $ApiFunction = $env:CAP_API_FUNCTION_NAME }
 if ([string]::IsNullOrWhiteSpace($ApiPackage))      { $ApiPackage = $env:CAP_API_PACKAGE_PATH }
+if ([string]::IsNullOrWhiteSpace($LambdaEnvFile))   { $LambdaEnvFile = $env:CAP_LAMBDA_ENV_FILE }
 if ([string]::IsNullOrWhiteSpace($FrontendDir))     { $FrontendDir = 'dist' }
 
 # Default (like bash): if no deployable chosen, do both.
@@ -102,7 +116,20 @@ function Invoke-Aws {
         $ErrorActionPreference = $previous
     }
     if ($LASTEXITCODE -ne 0 -and -not $NoThrow) {
-        Get-Err "aws command failed (exit $LASTEXITCODE): aws $($AwsArgs -join ' ')"
+        # Re-run capturing stderr to a temp file under 'Continue' (the native
+        # stderr->NativeCommandError conversion in PS 5.1 must not throw), so
+        # the real AWS error is reported instead of a bare exit code.
+        $errFile = Join-Path $env:TEMP ('cap-aws-err-' + [guid]::NewGuid().ToString('N') + '.txt')
+        $prev2 = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        try {
+            $null = & aws @AwsArgs 1>$null 2>$errFile
+        } finally {
+            $ErrorActionPreference = $prev2
+        }
+        $err = if (Test-Path -LiteralPath $errFile) { Get-Content -LiteralPath $errFile -Raw } else { '' }
+        Remove-Item -LiteralPath $errFile -Force -ErrorAction SilentlyContinue
+        Get-Err "aws command failed (exit $LASTEXITCODE): aws $($AwsArgs -join ' ')`n$err"
     }
 }
 
@@ -184,6 +211,30 @@ function Test-LambdaFunctionExists([string]$fn) {
     } finally {
         $ErrorActionPreference = $previous
     }
+}
+
+# Waits until the function's LastUpdateStatus is no longer InProgress (i.e.
+# "Successful") so a follow-up update-function-configuration does not race a
+# still-Applying code update. Times out after $TimeoutSec seconds.
+function Wait-LambdaReady([string]$fn, [int]$TimeoutSec = 120) {
+    $deadline = (Get-Date).AddSeconds($TimeoutSec)
+    if (-not $TimeoutSec) { Write-Err 'Wait-LambdaReady requires a positive TimeoutSec.' }
+    while ((Get-Date) -lt $deadline) {
+        $status = (& aws lambda get-function --function-name $fn --region $Region --query 'Configuration.LastUpdateStatus' --output text 2>$null)
+        if ($LASTEXITCODE -ne 0) {
+            # Function not found yet (just created) - treat as not ready.
+            Start-Sleep -Seconds 2
+            continue
+        }
+        if ($status -ne 'InProgress') {
+            if ($status -ne 'Successful') {
+                Write-Host "Lambda status is '$status' (not Successful) - see CloudWatch for details."
+            }
+            return
+        }
+        Start-Sleep -Seconds 2
+    }
+    Get-Err "Timed out waiting for Lambda function $fn to finish updating."
 }
 
 # ---------------------------------------------------------------------------
@@ -330,16 +381,44 @@ if ($Api) {
         $functionExists = Test-LambdaFunctionExists $ApiFunction
         $execRole = $env:CAP_LAMBDA_ROLE_ARN
 
+        # Optional environment file (gitignored) with the { "Variables": {...} }
+        # shape (UTF-8 without BOM - the AWS CLI file:// parser rejects a BOM).
+        # Validated here so a bad file never reaches the create/update.
+        $envArgs = @()
+        if (-not [string]::IsNullOrWhiteSpace($LambdaEnvFile)) {
+            if (-not (Test-Path -LiteralPath $LambdaEnvFile)) {
+                Get-Err "Lambda environment file not found: $LambdaEnvFile"
+            }
+            try {
+                $envDoc = Get-Content -LiteralPath $LambdaEnvFile -Raw | ConvertFrom-Json
+                if (-not $envDoc.PSObject.Properties['Variables']) {
+                    Get-Err "Lambda environment file '$LambdaEnvFile' must contain a 'Variables' object."
+                }
+            } catch {
+                Get-Err "Lambda environment file '$LambdaEnvFile' is not valid JSON."
+            }
+            # Pass the env file via a file:// URI. PS 5.1 native-command splatting
+            # does NOT quote arguments containing braces/parentheses, so inline
+            # JSON (which contains { } and ") gets split into multiple argv tokens.
+            # A file:// URI is a single "token" with no such characters, so it is
+            # passed intact. Use forward slashes; two leading slashes after scheme.
+            $envFileUri = 'file://' + ($LambdaEnvFile -replace '\\', '/')
+            $envArgs = @('--environment', $envFileUri)
+        }
+
         if ($DryRun) {
             Get-Step 'Dry run: API package'
             if ($functionExists) {
                 Write-Host "aws lambda update-function-code --function-name $ApiFunction --zip-file $ApiPackage"
             } else {
                 $roleDisplay = if ([string]::IsNullOrWhiteSpace($execRole)) { '<CAP_LAMBDA_ROLE_ARN>' } else { $execRole }
-                Write-Host "aws lambda create-function --function-name $ApiFunction --runtime nodejs20.x --handler handler.handler --role $roleDisplay --zip-file $ApiPackage"
+                Write-Host "aws lambda create-function --function-name $ApiFunction --runtime nodejs20.x --handler handler.mjs.handler --role $roleDisplay --zip-file $ApiPackage --timeout 30"
                 if ([string]::IsNullOrWhiteSpace($execRole)) {
                     Get-Warn 'CAP_LAMBDA_ROLE_ARN is not set; the create-function path will refuse to run without it.'
                 }
+            }
+            if ($envArgs.Count -gt 0) {
+                Write-Host "aws lambda update-function-configuration --function-name $ApiFunction --timeout 30 $($envArgs -join ' ')"
             }
             exit 0
         }
@@ -353,8 +432,16 @@ if ($Api) {
                 Get-Err 'The Lambda function does not exist and CAP_LAMBDA_ROLE_ARN is not set. An execution role ARN is required to create it (admin-provided, or via iam:CreateRole/iam:PassRole grants).'
             }
             Get-Step 'Creating Lambda function'
-            Invoke-Aws @('lambda','create-function','--function-name',$ApiFunction,'--runtime','nodejs20.x','--handler','handler.handler','--role',$execRole,'--zip-file',('fileb://' + $ApiPackage),'--region',$Region,'--output','json') | Out-Null
+            Invoke-Aws @('lambda','create-function','--function-name',$ApiFunction,'--runtime','nodejs20.x','--handler','handler.mjs.handler','--role',$execRole,'--zip-file',('fileb://' + $ApiPackage),'--timeout','30','--region',$Region,'--output','json') | Out-Null
             Write-Host "Lambda function created for $ApiFunction."
+        }
+        if ($envArgs.Count -gt 0) {
+            Wait-LambdaReady $ApiFunction
+            Get-Step 'Applying Lambda environment configuration'
+            $base = @('lambda','update-function-configuration','--function-name',$ApiFunction,'--timeout','30','--handler','handler.mjs.handler','--region',$Region,'--output','json')
+            $all = @($base) + @($envArgs)
+            Invoke-Aws $all | Out-Null
+            Write-Host "Lambda environment and timeout applied for $ApiFunction."
         }
     } else {
         Write-Host 'API deploy is configured but no package path was provided. This script requires an archive produced by package-api.ps1.'

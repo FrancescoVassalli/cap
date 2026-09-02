@@ -17,25 +17,29 @@ export function createApiDependencies(
   const config = createConfig(env)
   const logger = createApiLogger()
 
-  // Deterministic at startup: the S3 presigner is only selected when a bucket,
-  // region, and credentials are all present. Otherwise we fall back to the
-  // local presigner so development and CI keep working without AWS. Because the
-  // browser then PUTs to a localhost URL that reads-and-discards the bytes (it
-  // cannot reach S3), we emit a warning whenever the frontend expects S3 but the
-  // backend is actually running locally, so a "silent discard" is never hidden.
+  // Deterministic at startup: the S3 presigner is only selected when a bucket
+  // and region are present and either static credentials are available (local
+  // dev) or role-based credentials were explicitly requested (serverless, where
+  // Lambda reserves the credential keys and the execution role supplies them).
+  // Otherwise we fall back to the local presigner so development and CI keep
+  // working without AWS. Because the browser then PUTs to a localhost URL that
+  // reads-and-discards the bytes (it cannot reach S3), we emit a warning
+  // whenever the frontend expects S3 but the backend is actually running
+  // locally, so a "silent discard" is never hidden.
+  const hasStaticS3Creds =
+    Boolean(env['AWS_ACCESS_KEY_ID']) && Boolean(env['AWS_SECRET_ACCESS_KEY'])
   const useS3 =
     config.localPresignerMode !== 'mock' &&
     Boolean(config.awsBucketName) &&
     Boolean(config.awsRegion) &&
-    Boolean(env['AWS_ACCESS_KEY_ID']) &&
-    Boolean(env['AWS_SECRET_ACCESS_KEY'])
+    (config.roleBasedS3 || hasStaticS3Creds)
   const presigner = useS3 ? createS3Presigner(config) : createLocalPresigner(config)
 
   logger.log(
     useS3 ? 'info' : 'warn',
     useS3 ? 'presigner-s3-active' : 'presigner-local-active',
     useS3
-      ? { bucket: config.awsBucketName ?? '', region: config.awsRegion ?? '' }
+      ? { bucket: config.awsBucketName ?? '', region: config.awsRegion ?? '', roleBased: config.roleBasedS3 ? '1' : '0' }
       : { localMode: config.localPresignerMode },
   )
 

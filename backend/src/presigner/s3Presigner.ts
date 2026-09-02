@@ -14,13 +14,12 @@ export function createS3Presigner(
     localPresignerMode?: 'signed' | 'mock'
   },
 ): UploadUrlPresigner {
+  // No explicit `credentials`: the SDK default provider chain resolves them.
+  // Locally that is the ambient AWS_* env values (matching the previous
+  // explicit passthrough); in Lambda it is the execution role, since Lambda
+  // reserves AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY and they cannot be set.
   const client = new S3Client({
     region: config.awsRegion,
-    credentials: {
-      accessKeyId: process.env.AWS_ACCESS_KEY_ID ?? '',
-      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY ?? '',
-      ...(process.env.AWS_SESSION_TOKEN ? { sessionToken: process.env.AWS_SESSION_TOKEN } : {}),
-    },
   })
 
   return {

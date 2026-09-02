@@ -80,10 +80,13 @@ the in-memory mocks while the dev app talks to the real API.
 **Status:** A Windows-native deployment is implemented (`scripts/deploy/deploy-aws.ps1`
 + `scripts/deploy/package-api.ps1`) and the **static frontend is deployed live** to
 the real S3 bucket `cap-frontend-590251390266-us-east-2-an` (build + sync + correct
-cache headers verified against the account). The API Lambda artifact is packaged and
-its handler is verified functional (a real S3 presigned upload URL is issued from the
-extracted zip). What cannot be done from the current `cap-agent` AWS session is
-documented below so an administrator can unlock the remaining layers.
+cache headers verified against the account). The **Lambda function `cap-api` now exists
+in the account** and is configured (nodejs20.x, handler `handler.mjs.handler`, role
+`lambda-cap-role-1`, `CAP_S3_ROLE_CREDENTIALS=1` + documents bucket env). The remaining
+gaps to a live API are: (1) the **execution role lacks runtime `logs:*`/`s3:*`**
+(so the function cannot log to CloudWatch or presign uploads yet), and (2) **API Gateway
+is still DENIED to `cap-agent`**, so no public HTTPS endpoint exists. Exact commands to
+get API Gateway live are in "Next steps" below.
 
 **What is in the repo**
 - `scripts/deploy/deploy-aws.ps1` — Windows-native analogue of `scripts/deploy-aws.sh`
@@ -107,21 +110,14 @@ documented below so an administrator can unlock the remaining layers.
   extracted zip returns `200 {"status":"ok"}` on `/health` and a signed S3 presigned URL
   on the upload-url route (local vendor `dist` was cleaned).
 
-**Re-verified on 2026-09-01, after an admin IAM policy update (live `cap-agent` session, account 590251390266, us-east-2): the Lambda blockers are NOT resolved.** The admin-issued policy was applied and re-probed from the current `cap-agent` credentials (`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` from the gitignored `.env`). Live probes confirm exactly which gates remain:
-- `lambda:CreateFunction` **is still allowed** (a probe create fails only on role validation, i.e. `InvalidParameterValueException: The role defined for the function cannot be assumed by Lambda` — no resource was created).
-- `lambda:ListFunctions` **is allowed** and returns `[]` — no Lambda function exists; an administrator has not pre-created one.
-- `iam:CreateRole` **is still DENIED** (a temporary `cap-lambda-perm-probe-2` role was refused with `AccessDenied`; nothing was created). `iam:GetRole`/`iam:ListRoles` are allowed, but `GetRole` probes for ten plausible execution-role names (`cap-lambda-execution-role`, `cap-api-execution-role`, …) all return `NoSuchEntity` — there is **no Lambda execution role** to pass, and `CAP_LAMBDA_ROLE_ARN` is not set anywhere.
-- API Gateway is **still fully DENIED**: `apigateway:GET` is denied on both `get-rest-apis` (v1) and `apigatewayv2:get-apis`, and `apigateway:POST` is denied on `create-api` — no public HTTPS endpoint can be created even if a Lambda existed.
+**Re-verified on 2026-09-02 (live `cap-agent` session, account 590251390266, us-east-2): the Lambda function now EXISTS and the execution-role gate is UNBLOCKED.** The admin added the role ARN to `.env` as `CAP_LAMBDA_ROLE_ARN`, and `deploy-aws.ps1 -Api` created the function. Live probes confirm:
+- Lambda function `cap-api` **exists** — runtime `nodejs20.x`, handler `handler.mjs.handler`, timeout 30s, memory 128, last modified 2026-09-02.
+- Lambda environment is correctly configured: `CAP_S3_ROLE_CREDENTIALS=1` (role-based S3), `S3_BUCKET_NAME=cap1-casedocs-590251390266-us-east-2-an`, `S3_UPLOAD_PREFIX=ugc1`.
+- Execution role `lambda-cap-role-1` **exists** with the correct `lambda.amazonaws.com` trust policy and is attached to the function — the `API (execution role)` gate in `deploy-aws.ps1 -Check` will now report OK.
+- **NEW BLOCKER (runtime): the execution role `lambda-cap-role-1` is missing runtime permissions.** Its only inline policy (`lambda-cap-role-1Policy`) grants **deploy-lifecycle** actions only (`lambda:CreateFunction`, `lambda:UpdateFunctionCode`, `lambda:GetFunction`, `lambda:ListFunctions`). It has **no `logs:*`** and **no `s3:*`**. Consequences verified against the account: no CloudWatch log group `/aws/lambda/cap-api` exists (the function has never been able to write logs), and the S3 presigner (which uses role credentials via `CAP_S3_ROLE_CREDENTIALS=1`) would fail to presign because the role cannot call S3. The function is provisioned but **not yet runtime-functional** until the role is repaired.
+- API Gateway is **still fully DENIED — this is the remaining deployment blocker.** `apigateway:GET` is denied on both `get-rest-apis` (v1) and `apigatewayv2:get-apis` (`AccessDeniedException`, no identity-based policy allows `apigateway:GET`). No API Gateway API exists and none can be created by this session, so there is **no public HTTPS endpoint** yet.
 - CloudFront: `cloudfront:ListDistributions`/`ListCloudFrontOriginAccessIdentities` are allowed, but the account has **zero distributions**, and the OAC `cap-frontend-oac` (`E1EMZ30G5M3VFD`) recorded earlier **no longer exists** — the CDN layer has not been provisioned.
-- S3 is unaffected: both buckets (`cap-frontend-590251390266-us-east-2-an`, `cap1-casedocs-590251390266-us-east-2-an`) are present.
-
-Net: the admin policy update unblocks **nothing new** for API deployment — Lambda deployment is still blocked at the same two gates (execution role + API Gateway), and the frontend CDN/CloudFront layer is still unprovisioned. If the policy was intended to add `iam:CreateRole`/`apigateway:*`, it is not effective on the credentials in `C:\Development\cap\cap\.env`.
-
-**Re-verified 2026-09-01 after the admin added `AWSLambdaBasicExecutionRole`: the execution-role gate is STILL closed.**
-- `.env`/`.env.local` contain **no `CAP_LAMBDA_ROLE_ARN`** (the only ARN present is `AWS_ARN=arn:aws:iam::590251390266:user/cap-agent`, the user's own ARN). The ARN was reported as added but is not in the env files under any role-like key.
-- `iam:ListRoles` still shows **only the three service-linked roles** — no execution role exists in the account, so there is nothing to set `CAP_LAMBDA_ROLE_ARN` to even if the key were present.
-- `iam:CreateRole` probe (`cap-lambda-perm-probe-3`) is **still DENIED**, so the session cannot self-provision a role. Attaching the `AWSLambdaBasicExecutionRole` managed policy to the `cap-agent` *user* would not help either — Lambda requires an execution *role* with `lambda.amazonaws.com` in its trust policy that the deployer can pass.
-- Net: the Lambda still cannot be created. The next real step is for the admin to share the actual **role ARN** (a role that exists in the account) so it can be placed in `.env` as `CAP_LAMBDA_ROLE_ARN`.
+- S3 is unaffected: both buckets (`cap-frontend-590251390266-us-east-2-an`, `cap1-casedocs-590251390266-us-east-2-an`) are present. (Note: the `.env` `S3_BUCKET_NAME` resolves to the **documents** bucket `cap1-casedocs-…`; keep `CAP_FRONTEND_BUCKET` set to the static-host bucket for frontend deploys.)
 
 **Deploy tooling upgraded this round (2026-09-01)**
 - `deploy-aws.ps1 -Check` now probes the real deployment gates instead of stopping at `lambda:ListFunctions`: it reports Lambda reachability, the **execution-role gate** (whether `CAP_LAMBDA_ROLE_ARN` is set and verified via `iam:GetRole`), **API Gateway access** (v1/v2 read probe), **CloudFront distribution presence**, and S3 bucket access. This means an admin can re-run `-Check` after each policy change and immediately see which layer opened up.
@@ -129,40 +125,56 @@ Net: the admin policy update unblocks **nothing new** for API deployment — Lam
 - `deploy-aws.ps1` now **refuses to sync the frontend (`--delete`) into a bucket resolved from `S3_BUCKET_NAME`** unless an explicit `-FrontendBucket`/`CAP_FRONTEND_BUCKET` is given — the fallback points at the backend documents bucket (`cap1-casedocs-…`), and a bare `-Frontend` run could have wiped case documents. Set `CAP_FRONTEND_BUCKET=cap-frontend-590251390266-us-east-2-an` in the deploy environment.
 - Note: `planning/deployment-infrastructure.md` (referenced for the CloudFront distribution config/OAC rollout) does not exist in the repo — recreate it with the distribution config when CloudFront is unblocked, so `CAP_CLOUDFRONT_DISTRIBUTION_ID`/OAC setup has a single source of truth.
 
-**Blockers needing an administrator (permissions verified against the live account after the policy update)**
-- Lambda deploy: `lambda:CreateFunction` **is** allowed, but `iam:CreateRole` is **denied**,
-  so no Lambda execution role can be created by this session. A functioning Lambda requires
-  a role (or an `iam:CreateRole`/`iam:PassRole` grant). **The key fact:** the admin-added
-  `AWSLambdaBasicExecutionRole` did not create a role — no role exists in the account and no
-  `CAP_LAMBDA_ROLE_ARN` was written to `.env`. The admin must share the **actual role ARN** of
-  a role that exists (i.e. one created with `lambda.amazonaws.com` in its trust policy and the
-  `AWSLambdaBasicExecutionRole` managed policy attached), and it must be written to `.env` as
-  `CAP_LAMBDA_ROLE_ARN=arn:aws:iam::<account>:role/<name>` (unquoted value or same quoting as
-  the existing keys).
-- API Gateway: `apigateway:*` is **denied**, so no public HTTP API endpoint can be created.
+**Blockers needing an administrator (verified 2026-09-02 against the live account)**
+- **API Gateway is the sole remaining deployment blocker** for going live: `apigateway:*` is
+  **denied** to `cap-agent` (verified: `apigateway:GET` → `AccessDeniedException` on both v1
+  `get-rest-apis` and v2 `get-apis`). No HTTP API exists and none can be created by this
+  session. Grant `apigatewayv2:*` (HTTP API) — or REST `apigateway:*` — to create the public
+  HTTPS endpoint.
+- **Lambda runtime role is misconfigured (must fix before the endpoint is functional):** the
+  execution role `lambda-cap-role-1` has only a deploy-lifecycle inline policy and **lacks
+  `logs:*` and `s3:*`**. Attach `AWSLambdaBasicExecutionRole` (for CloudWatch) and grant
+  `s3:PutObject`/`s3:GetObject` (scoped to `arn:aws:s3:::cap1-casedocs-590251390266-us-east-2-an*`
+  — the `GetObject` covers the presigned-URL GET paths) to the role, or replace the inline
+  policy with one that carries the runtime permissions. Until this is done the Lambda can
+  neither write CloudWatch logs (`describe-log-groups` for `/aws/lambda/cap-api` returns `[]`)
+  nor presign uploads via its execution-role credentials.
 - CloudFront: `cloudfront:CreateDistribution` is blocked by **account verification** (AWS
   support must verify the account before adding new distributions). The earlier OAC
   `cap-frontend-oac` (`E1EMZ30G5M3VFD`) is no longer present in the account; recreate it per
   the distribution config/rollout note to be re-created in `planning/deployment-infrastructure.md`
   once the account is verified.
 
-**Next steps (for an AWS administrator or a broadened IAM policy)**
-1. Provide a real Lambda execution role ARN and put it in `.env` as `CAP_LAMBDA_ROLE_ARN`
-   (e.g. `arn:aws:iam::590251390266:role/cap-lambda-execution-role`), or grant
-   `iam:CreateRole` + `iam:PassRole` + `lambda:CreateFunction`; then run
-   `deploy-aws.ps1 -Api` — the tool now creates the function if it does not exist.
-   Re-run `deploy-aws.ps1 -Check` after the role is set: the `API (execution role)` line
-   flips to `OK` and the API path stops reporting `MISSING`.
-2. Verify the AWS account for CloudFront, then create the distribution with OAC
-   `cap-frontend-oac` (config to be recorded in the re-created deployment-infrastructure
-   plan) and set `CAP_CLOUDFRONT_DISTRIBUTION_ID`; `deploy-aws.ps1 -Frontend` will then
-   invalidate it.
-3. Grant `apigatewayv2:*` (or REST API) to expose the Lambda behind a public HTTPS URL and
-   point `VITE_CAP_API_BASE_URL` / `CAP_API_BASE_URL` at it.
-4. Confirm `CAP_ALLOWED_ORIGINS` to the exact static-host origin before public release.
-5. Set `CAP_FRONTEND_BUCKET=cap-frontend-590251390266-us-east-2-an` in the deploy
-   environment so the frontend deploy targets the static-host bucket (the documents-bucket
-   guard makes this mandatory for a non-`-DryRun` `-Frontend` run).
+**Next steps — getting the API Gateway live**
+1. **Repair the Lambda execution role first** (so the endpoint is actually functional):
+   attach `AWSLambdaBasicExecutionRole` and an S3 policy to `lambda-cap-role-1`, or update
+   its inline policy to add `logs:*` + scoped `s3:PutObject`/`s3:GetObject`. Then re-run
+   `deploy-aws.ps1 -Check`; the `API (execution role)` line should read OK.
+2. **Grant the `cap-agent` IAM user `apigatewayv2:*`** (HTTP API v2; or REST `apigateway:*`).
+   This is the step that actually unblocks the public endpoint. Re-run `deploy-aws.ps1 -Check`
+   and confirm the `API (API Gateway)` line flips from `BLOCKED` to `OK`.
+3. **Create the HTTP API (v2) and route it to `cap-api`:**
+   - `aws apigatewayv2 create-api --name cap-api-http --protocol-type HTTP`
+   - add a stage (`$default` or a named stage) via `create-stage`
+   - add a route `ANY /{proxy+}` (and the root `/`) with `create-route`
+   - create an integration targeting the `cap-api` Lambda ARN
+     (`arn:aws:lambda:us-east-2:590251390266:function:cap-api`) with
+     `payload-format-version=2.0` (the `handler.mjs.handler` payload shape), and attach it.
+   - `aws apigatewayv2 create-deployment` and note the invoke URL
+     (`create-api` returns `ApiEndpoint` → `https://<api-id>.execute-api.<region>.amazonaws.com`).
+4. **Grant Lambda permission to be invoked by API Gateway:** add a resource-based policy to
+   the function (or rely on the API Gateway v2 `create-integration` permission model) so
+   API Gateway can `lambda:InvokeFunction` on `cap-api` (the `lambda:AddPermission` call
+   from the AWS CLI is the standard way: source-arn `arn:aws:execute-api:...`).
+5. **Point the frontend at the live API:** set `VITE_CAP_API_BASE_URL` /
+   `CAP_API_BASE_URL` to the API Gateway invoke URL and confirm `CAP_ALLOWED_ORIGINS`
+   includes the exact static-host origin before release.
+6. **Smoke test through the public URL:** `GET /health` → `200 {"status":"ok"}`, then the
+   intake submit (`POST /intakes`) and presigned upload (`POST /intakes/:id/upload-url`) flows.
+7. Set `CAP_FRONTEND_BUCKET=cap-frontend-590251390266-us-east-2-an` in the deploy environment
+   so frontend deploys target the static-host bucket (the documents-bucket guard makes this
+   mandatory for a non-`-DryRun` `-Frontend` run); CloudFront rollout remains separate per the
+   account-verification note above.
 
 ## react-native-app — mobile app implementation
 

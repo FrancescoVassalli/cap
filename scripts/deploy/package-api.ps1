@@ -83,6 +83,24 @@ if ($LASTEXITCODE -ne 0) { Write-Err "npm install in staging failed (exit $LASTE
 Remove-Item -Path (Join-Path $Staging 'node_modules\.bin') -Recurse -Force -ErrorAction SilentlyContinue
 Get-ChildItem -Path $Staging -Recurse -File -Filter '*.map' | ForEach-Object { Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue }
 
+# 7. Emit a .mjs wrapper for the Lambda handler. The nodejs20 runtime's loader
+#    resolves plain .js files via require() first (ERR_REQUIRE_ESM), even when a
+#    root package.json declares "type": "module". A dynamic import() from a .mjs
+#    file is the AWS-documented shim that reliably loads our ESM handler.
+#    Lambda handler string: handler.mjs.handler
+$mjs = @'
+import { handler as appHandler } from './handler.js';
+
+export const handler = async (event, context) => {
+  return appHandler(event, context);
+};
+'@
+[System.IO.File]::WriteAllText(
+    (Join-Path $Staging 'handler.mjs'),
+    $mjs,
+    (New-Object System.Text.UTF8Encoding $false)
+)
+
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 if (Test-Path $OutFile) { Remove-Item -LiteralPath $OutFile -Force }
 
@@ -106,4 +124,4 @@ try {
 
 $zipSizeKB = [math]::Round((Get-Item $OutFile).Length / 1KB, 1)
 Write-Host "Package created: $OutFile ($zipSizeKB KB)" -ForegroundColor Green
-Write-Host "Lambda handler:  handler.handler" -ForegroundColor Green
+Write-Host "Lambda handler:  handler.mjs.handler" -ForegroundColor Green
