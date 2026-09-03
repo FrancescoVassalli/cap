@@ -127,6 +127,49 @@ is denied to `cap-agent`).
   - `OPTIONS /health` (Origin `https://cohealthinitiative.org`) → `204` with
     `access-control-allow-origin` / `-methods` / `-headers` correct
 
+**Next steps — hit the live API with `curl` from the local terminal**
+The API (`https://ah0jz85mlj.execute-api.us-east-2.amazonaws.com`) and Lambda
+(`cap-api`) are live, so you can exercise the public endpoint directly from a
+local shell without the frontend. No secrets are required for the read/health
+and submission calls (the API is public, no auth header). Use the examples below:
+
+- **Health smoke check** (should return `200` `{"status":"ok","service":"cap-api",...}`):
+  ```sh
+  curl -i https://ah0jz85mlj.execute-api.us-east-2.amazonaws.com/health
+  ```
+- **Create an intake** (requires a fresh `Idempotency-Key` UUID; returns
+  `201 {"referenceId":"CAP-XXXX-XXXX"}`; replaying the same key returns the same id):
+  ```sh
+  curl -i -X POST https://ah0jz85mlj.execute-api.us-east-2.amazonaws.com/intakes \
+    -H "Idempotency-Key: $(uuidgen)" \
+    -H "Content-Type: application/x-www-form-urlencoded" \
+    -d "FirstName=Jane&LastName=Doe&EmailAddress=jane@example.com"
+  ```
+  (On Windows PowerShell replace `$(uuidgen)` with `[guid]::NewGuid().ToString()`
+  in a `$key` variable and use `-H "Idempotency-Key: $key"`.)
+- **Request an upload URL** for the reference id above (returns a real S3
+  presigned PUT URL; used by the web/mobile adapters):
+  ```sh
+  curl -i -X POST https://ah0jz85mlj.execute-api.us-east-2.amazonaws.com/intakes/CAP-XXXX-XXXX/upload-url \
+    -H "Content-Type: application/json" \
+    -d "{\"filename\":\"scan.pdf\",\"contentType\":\"application/pdf\",\"size\":1234}"
+  ```
+- **Verify CORS preflight** for the production static origin:
+  ```sh
+  curl -i -X OPTIONS https://ah0jz85mlj.execute-api.us-east-2.amazonaws.com/health \
+    -H "Origin: https://cohealthinitiative.org" \
+    -H "Access-Control-Request-Method: POST"
+  ```
+
+Expected success path and the exact request/response shapes are documented in
+`planning/deployment-infrastructure.md` and the `backend` smoke tests. **Note on
+the upload flow:** the `upload-url` call itself succeeds (the presigned URL is
+issued), but actually `PUT`ing file bytes to that presigned URL returns `403
+AccessDenied` until blocker 1 below is resolved — the Lambda execution role still
+cannot `s3:PutObject`. Verify the `GET /health` + `POST /intakes` + upload-url
+calls first; the byte `PUT` to S3 and CloudWatch logging follow once the admin
+applies the role policy.
+
 **Live blockers (need an administrator)**
 1. **Lambda execution-role runtime permissions — REQUIRED before the upload flow and
    logging work.** `lambda-cap-role-1` has only deploy-lifecycle actions
