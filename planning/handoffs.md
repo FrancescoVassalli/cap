@@ -74,6 +74,24 @@ the in-memory mocks while the dev app talks to the real API.
    `npx playwright test` invocation against a running backend + frontend.
 3. Confirm the CORS origin whitelist in production (`CAP_ALLOWED_ORIGINS`) to the
    exact static-host origin before release.
+4. **Review the 4xx responses observed in the live API/API Gateway test runs
+   against the public endpoint** (`https://ah0jz85mlj.execute-api.us-east-2.amazonaws.com`):
+   - `POST /intakes` with a `{"zip":"10001"}` JSON body and **no**
+     `Idempotency-Key` header returns `401 {"error":{"code":"session_expired","message":"This intake session has expired."}}`.
+     This matches the intended session-id gate (`isValidIntakeId`, UUIDv4-only),
+     but confirm it matches the documented intents:
+     - A request with a valid `Idempotency-Key` returns `201 referenceId` (per the
+       curl examples in the deployment-infrastructure section below) — verify the
+       form-encoded EveryAction body path, not the JSON body path above.
+     - `POST /intakes` with a missing/invalid session id returns `401 session_expired`
+       — confirm this is the intended status code for a forged/stale session (vs a
+       `422` for a present-but-invalid body, which is what a missing body or invalid
+       form returns).
+   - `PUT /uploads/{id}` returns `403 AccessDenied` on S3 — this is the known
+     role-policy blocker (see deployment-infrastructure blocker 1), tracked
+     separately, not an API logic defect.
+   Confirm the intended status-code contract (201/200 vs 401 vs 422) is correct
+   and that no 4xx indicates an actual defect in the deployed handler.
 
 ## deployment-infrastructure — Windows-native AWS deployment
 
@@ -85,11 +103,7 @@ the `cap-agent` user was granted `apigatewayv2:*`. The **Lambda function `cap-ap
 deployed (nodejs20.x, CommonJS handler `handler.handler`, role `lambda-cap-role-1`,
 `CAP_S3_ROLE_CREDENTIALS=1` + documents bucket env) and serves `/health`, `POST /intakes`
 (idempotent), `POST /intakes/{id}/upload-url` (real S3 presigned URL), and CORS preflight
-verified end-to-end through the public URL. The **remaining run blocker** is the Lambda
-**execution-role runtime permissions**: `lambda-cap-role-1` still lacks `s3:*` and `logs:*`,
-so the browser `PUT` to the presigned URL returns `403 AccessDenied` (S3) and the function
-cannot write CloudWatch logs. This is an admin action (`iam:AttachRolePolicy`/`iam:PutRolePolicy`
-is denied to `cap-agent`).
+verified end-to-end through the public URL
 
 **What is in the repo**
 - `scripts/deploy/deploy-aws.ps1` — Windows-native analogue of `scripts/deploy-aws.sh`
