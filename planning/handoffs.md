@@ -66,9 +66,10 @@ Vite's `.env.local` by default, the frontend test project now forces
 the in-memory mocks while the dev app talks to the real API.
 
 **Next steps**
-1. API/Lambda + API Gateway production wiring remains blocked on IAM/account
-   grants (see the deployment-infrastructure section below) and on the
-   every-action (CRM) contract, which is still outstanding.
+1. The EveryAction (CRM) contract is still outstanding; the API/Lambda + API
+   Gateway production wiring is otherwise live, and the Lambda runtime role now
+   has the scoped S3 + `logs:*` permissions (see the deployment-infrastructure
+   section below).
 2. Add Playwright E2E runner to the standard `npm test`/CI path so the presigned
    upload contract stays covered; currently it runs only via the explicit
    `npx playwright test` invocation against a running backend + frontend.
@@ -87,11 +88,14 @@ the in-memory mocks while the dev app talks to the real API.
        — confirm this is the intended status code for a forged/stale session (vs a
        `422` for a present-but-invalid body, which is what a missing body or invalid
        form returns).
-   - `PUT /uploads/{id}` returns `403 AccessDenied` on S3 — this is the known
-     role-policy blocker (see deployment-infrastructure blocker 1), tracked
-     separately, not an API logic defect.
-   Confirm the intended status-code contract (201/200 vs 401 vs 422) is correct
-   and that no 4xx indicates an actual defect in the deployed handler.
+   - `PUT` to the presigned S3 URL now returns `200` with an ETag once the
+     Lambda execution role gained `s3:PutObject` on the documents bucket (see
+     deployment-infrastructure), confirming the earlier `403 AccessDenied` was
+     purely the role-policy blocker and not an API logic defect. Status-code
+     contract confirmed live: `201` on a valid idempotent submit, `200` on
+     replay, `401 session_expired` on a missing/invalid session id, and `422`
+     on a present-but-invalid body — no 4xx indicates a defect in the deployed
+     handler.
 
 ## deployment-infrastructure — Windows-native AWS deployment
 
@@ -103,7 +107,10 @@ the `cap-agent` user was granted `apigatewayv2:*`. The **Lambda function `cap-ap
 deployed (nodejs20.x, CommonJS handler `handler.handler`, role `lambda-cap-role-1`,
 `CAP_S3_ROLE_CREDENTIALS=1` + documents bucket env) and serves `/health`, `POST /intakes`
 (idempotent), `POST /intakes/{id}/upload-url` (real S3 presigned URL), and CORS preflight
-verified end-to-end through the public URL
+verified end-to-end through the public URL. The formerly-blocked runtime piece is now in
+place: the Lambda execution role has `logs:*` plus the scoped `s3:PutObject` on the
+documents bucket, so the browser `PUT` of document bytes to the presigned S3 URL returns
+`200` and the object lands in the bucket.
 
 **What is in the repo**
 - `scripts/deploy/deploy-aws.ps1` — Windows-native analogue of `scripts/deploy-aws.sh`
@@ -138,6 +145,15 @@ verified end-to-end through the public URL
   - `POST /intakes` (form body + `Idempotency-Key` UUID) → `201 {"referenceId":"CAP-XXXX-XXXX"}`,
     and idempotent replay returns the same reference id
   - `POST /intakes/{id}/upload-url` (JSON body) → `200 {"uploadUrl":"https://...s3.../intakes/.../documents/...?X-Amz-Signature=..."}`
+  - **`PUT` to the presigned upload URL with real file bytes → `200` with an ETag**
+    (the previous `403 AccessDenied` is gone): the object is confirmed in
+    `cap1-casedocs-590251390266-us-east-2-an` under
+    `intakes/{intakeId}/documents/{documentId}` with the `intakeid`/`documentid`
+    metadata, `application/pdf` content type, and AES256 server-side encryption.
+  - **CloudWatch** `/aws/lambda/cap-api` log group now exists (the Lambda role has
+    `AWSLambdaBasicExecutionRole`); its events show the structured
+    `intake-accepted`, `intake-replayed`, and `upload-url-issued` logs from these
+    live runs.
   - `OPTIONS /health` (Origin `https://cohealthinitiative.org`) → `204` with
     `access-control-allow-origin` / `-methods` / `-headers` correct
 
@@ -177,37 +193,28 @@ and submission calls (the API is public, no auth header). Use the examples below
 
 Expected success path and the exact request/response shapes are documented in
 `planning/deployment-infrastructure.md` and the `backend` smoke tests. **Note on
-the upload flow:** the `upload-url` call itself succeeds (the presigned URL is
-issued), but actually `PUT`ing file bytes to that presigned URL returns `403
-AccessDenied` until blocker 1 below is resolved — the Lambda execution role still
-cannot `s3:PutObject`. Verify the `GET /health` + `POST /intakes` + upload-url
-calls first; the byte `PUT` to S3 and CloudWatch logging follow once the admin
-applies the role policy.
+the upload flow:** the full path is now verified live — `upload-url` issues a real
+S3 presigned URL, and the byte `PUT` to that URL returns `200` and lands the file
+in the documents bucket. CloudWatch logging is flowing (`/aws/lambda/cap-api`), so
+the curl examples above exercise the complete flow from start to finish.
 
 **Live blockers (need an administrator)**
-1. **Lambda execution-role runtime permissions — REQUIRED before the upload flow and
-   logging work.** `lambda-cap-role-1` has only deploy-lifecycle actions
-   (`lambda:CreateFunction/UpdateFunctionCode/GetFunction/ListFunctions`). Add
-   `logs:*` (attach `AWSLambdaBasicExecutionRole`) and scoped S3 for the documents
-   bucket (`arn:aws:s3:::cap1-casedocs-590251390266-us-east-2-an/*`):
-   `s3:PutObject` (browser PUT) and `s3:GetObject` (presigned GET paths, per
-   `UPLOAD_LIMITS` docs). Verified consequences: the presigned S3 `PUT` returns
-   `403 AccessDenied` (`assumed-role/lambda-cap-role-1/cap-api is not authorized to
-   perform s3:PutObject ...`), and no `/aws/lambda/cap-api` CloudWatch log group
-   exists. `cap-agent` is denied `iam:AttachRolePolicy`/`iam:PutRolePolicy`, so an
-   admin must apply this.
-2. **CloudFront** — `cloudfront:CreateDistribution` blocked by **account verification**
+1. **CloudFront** — `cloudfront:CreateDistribution` blocked by **account verification**
    (AWS support must verify the account before adding distributions); the CDN layer is
    not yet provisioned. The OAC `cap-frontend-oac` must be recreated per
-   `planning/deployment-infrastructure.md` once the account is verified.
+   `planning/deployment-infrastructure.md` once the account is verified. (The Lambda
+   execution-role runtime permissions blocker is resolved: `lambda-cap-role-1` now has
+   `AWSLambdaBasicExecutionRole` for `logs:*` and a scoped
+   `s3:PutObject`/`s3:GetObject` policy on the documents bucket — verified by a live
+   `200` byte `PUT` and CloudWatch log events.)
 
 ## react-native-app — mobile app implementation
 
-Drives the [React Native plan](./react-native-app.md) for the CAP mobile app. Web app and API are already implemented; backend deployment steps in master.md remain blocked on external dependencies (AWS credentials, CRM contract) and are not part of this handoff.
+Drives the [React Native plan](./react-native-app.md) for the CAP mobile app. Web app and API are already implemented; the byte-upload flow is verified against the live Lambda, and backend deployment is gated only on external dependencies that are not part of this handoff (CloudFront account verification, EveryAction/CRM contract).
 
 ### Status
 
-The Expo mobile app and the shared domain contract are implemented and green. Both the web app and the mobile app now share the same domain types, validation rules, and service contracts through `packages/shared`. The mobile build is wired to the live CAP Lambda (`cap-api`): `packages/mobile/.env` sets `EXPO_PUBLIC_CAP_SUBMISSION_MODE=api`, `EXPO_PUBLIC_CAP_UPLOAD_MODE=presigned`, and `EXPO_PUBLIC_CAP_API_BASE_URL=https://ah0jz85mlj.execute-api.us-east-2.amazonaws.com` (gitignored; documented in `.env.example`), and the config resolver was fixed so the Expo bundler actually inlines those values (it previously read env through an aliased variable, which silently kept the prototype defaults in the built bundle). Submission and upload-url issuance were verified end-to-end against the live endpoint; remaining work is device QA and the admin-applied Lambda S3 role policy. The architecture is summarized in [../architecture/react-native.md](../architecture/react-native.md).
+The Expo mobile app and the shared domain contract are implemented and green. Both the web app and the mobile app now share the same domain types, validation rules, and service contracts through `packages/shared`. The mobile build is wired to the live CAP Lambda (`cap-api`): `packages/mobile/.env` sets `EXPO_PUBLIC_CAP_SUBMISSION_MODE=api`, `EXPO_PUBLIC_CAP_UPLOAD_MODE=presigned`, and `EXPO_PUBLIC_CAP_API_BASE_URL=https://ah0jz85mlj.execute-api.us-east-2.amazonaws.com` (gitignored; documented in `.env.example`), and the config resolver was fixed so the Expo bundler actually inlines those values (it previously read env through an aliased variable, which silently kept the prototype defaults in the built bundle). Submission and upload-url issuance were verified end-to-end against the live endpoint; the admin-applied Lambda S3 role policy is now in place (the byte PUT to the presigned URL returns `200` and lands in the bucket); remaining work is device QA and the CloudFront layer. The architecture is summarized in [../architecture/react-native.md](../architecture/react-native.md).
 
 **What was completed (cumulative)**
 - **`packages/shared`** — the single source of truth for the intake domain: types (`Language`, `IntakeFormValues`, `IntakeDocument`, `ZipLocation`, `SubmissionErrorKind`, `IntakeSubmissionResult`, `SubmissionPayload`), service interfaces (`SubmissionService`, `ZipService`, `DocumentUploadService`), transport-neutral step validation (`validateIntakeStep`, `DOCUMENT_CONFIG`, `validateDocumentCandidates`), and the `MockSubmissionService` / `ApiSubmissionService` adapters.
@@ -234,11 +241,11 @@ The Expo mobile app and the shared domain contract are implemented and green. Bo
 
 ### Next steps
 
-1. ~~**Wiring mobile to the real backend is config-driven, contract-aligned, and ready**~~ — DONE: the mobile build now points at the live Lambda via `packages/mobile/.env` (gitignored) and the resolver inlines `EXPO_PUBLIC_CAP_*` at build time; `POST /intakes` and `POST /intakes/:id/upload-url` were verified end-to-end against the live API with mobile-shaped requests (see the completed bullet above). The only remaining upload gap is the byte PUT to S3, blocked by the admin-applied Lambda role policy (below).
+1. ~~**Wiring mobile to the real backend is config-driven, contract-aligned, and ready**~~ — DONE: the mobile build now points at the live Lambda via `packages/mobile/.env` (gitignored) and the resolver inlines `EXPO_PUBLIC_CAP_*` at build time; `POST /intakes` and `POST /intakes/:id/upload-url` were verified end-to-end against the live API with mobile-shaped requests (see the completed bullet above). The byte PUT to S3 is also verified now that the Lambda execution role has the scoped `s3:PutObject` policy.
 1. **QA on-device**: confirm no keyboard overlap across the contact/address step on both iPhone and Android, and that native document picking + the review/submit → success flow completes end-to-end (submission now goes to the real Lambda).
 1. **Cleanup**: remove the stale `apps/mobile` scaffold after confirming nothing references it.
 
 ### BLOCKED (external resources)
 
-- **Document byte PUT to S3**: `POST /intakes/:id/upload-url` issues a real presigned URL (verified `200`), but the Lambda execution role (`lambda-cap-role-1`) still lacks `s3:PutObject` on the documents bucket, so the mobile/web PUT of file bytes returns `403 AccessDenied` until an administrator attaches the scoped policy (see the deployment-infrastructure blockers; not an API or adapter defect). With no documents selected, the intake submit → success flow is fully live.
+- **Document byte PUT to S3**: RESOLVED — `POST /intakes/:id/upload-url` issues a real presigned URL (verified `200`) and the Lambda execution role (`lambda-cap-role-1`) now has the scoped `s3:PutObject` on the documents bucket, so the mobile/web PUT of file bytes returns `200` and the object lands in S3 (verified live 2026-09-04 against the public endpoint).
 - **On-device QA** (handoff item 2): requires an iPhone/Android device or emulator for keyboard safe-area, document-picking, and end-to-end submission testing — not available in this environment.
