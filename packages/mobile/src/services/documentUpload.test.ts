@@ -13,6 +13,9 @@ const pick = (overrides: Partial<UploadFileHandle> = {}): UploadFileHandle => ({
 
 type RequestStub = (url: string, init: RequestInit) => Promise<Response>
 
+/** Simulates the native expo-file-system `File` byte body on this platform. */
+const fileBodyFactory = () => new Blob([new ArrayBuffer(64)])
+
 function fakeResponse(status: number, body: unknown = {}): Response {
   return {
     ok: status >= 200 && status < 300,
@@ -53,10 +56,12 @@ describe('PresignedUploadService', () => {
       }
       expect(init.method).toBe('PUT')
       expect(url).toBe('https://presigned.example/upload')
+      expect(init.headers).toMatchObject({ 'Content-Type': 'application/pdf' })
+      expect((init.body as Blob).size).toBeGreaterThan(0)
       return fakeResponse(200)
     }
 
-    const service = new PresignedUploadService('https://cap.example', requestImpl)
+    const service = new PresignedUploadService('https://cap.example', requestImpl, fileBodyFactory)
     const uploaded = await service.upload(pick(), 'intake-1')
 
     expect(uploaded.id.startsWith('intake-1-')).toBe(true)
@@ -74,9 +79,10 @@ describe('PresignedUploadService', () => {
       putInit = init
       return fakeResponse(200)
     }
-    const service = new PresignedUploadService('https://cap.example', requestImpl)
+    const service = new PresignedUploadService('https://cap.example', requestImpl, fileBodyFactory)
     await service.upload(pick({ type: undefined }), 'intake-1')
     expect(putInit?.headers).toMatchObject({ 'Content-Type': 'application/octet-stream' })
+    expect((putInit?.body as Blob).size).toBeGreaterThan(0)
   })
 
   it('maps a rejected upload-location request to a DocumentUploadError', async () => {
@@ -105,7 +111,23 @@ describe('PresignedUploadService', () => {
       init.method === 'POST' ? fakeResponse(200, { uploadUrl: 'https://presigned.example/upload' }) : (() => {
         throw new Error('storage down')
       })()
+    const service = new PresignedUploadService('https://cap.example', requestImpl, fileBodyFactory)
+    await expect(service.upload(pick(), 'intake-1')).rejects.toBeInstanceOf(DocumentUploadError)
+  })
+
+  it('throws instead of sending an empty PUT when no byte body can be produced', async () => {
+    let putInit: RequestInit | undefined
+    const requestImpl: RequestStub = async (url, init) => {
+      if (init.method === 'POST') return fakeResponse(200, { uploadUrl: 'https://presigned.example/upload' })
+      putInit = init
+      return fakeResponse(200)
+    }
+    // No injected file factory and expo-file-system is not resolvable in this
+    // node environment, so the native byte transport is unavailable: the
+    // adapter must refuse the empty PUT (S3/local sink both reject it) instead
+    // of burning the presigned URL with `body: undefined`.
     const service = new PresignedUploadService('https://cap.example', requestImpl)
     await expect(service.upload(pick(), 'intake-1')).rejects.toBeInstanceOf(DocumentUploadError)
+    expect(putInit).toBeUndefined()
   })
 })

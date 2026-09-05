@@ -60,21 +60,27 @@ export class LocalDocumentUploadService implements DocumentUploadService {
  *   Mobile -> POST /intakes/{id}/upload-url -> backend issues short-lived
  *   presigned URL -> Mobile PUTs the file bytes directly to storage.
  *
- * Transport-neutral at the boundary: the request layer is injectable for tests,
- * and the native byte PUT uses expo-file-system's `File` when available. Throws
- * when no backend is configured so the UI never misleads the user into thinking
- * a sensitive document was stored securely.
+ * Transport-neutral at the boundary: the request layer and the file-body
+ * factory are injectable for tests. The native byte PUT uses expo-file-system's
+ * `File` when available; if no byte body can be produced the adapter throws
+ * instead of silently sending an empty PUT (S3 rejects an empty-object handoff
+ * and the local sink rejects it as `empty_upload`). Throws when no backend is
+ * configured so the UI never misleads the user into thinking a sensitive
+ * document was stored securely.
  */
 export class PresignedUploadService implements DocumentUploadService {
   private readonly baseUrl: string
   private readonly requestImpl: (url: string, init: RequestInit) => Promise<Response>
+  private readonly fileBodyFactory?: (uri: string) => Blob | undefined
 
   constructor(
     baseUrl = '',
     requestImpl?: (url: string, init: RequestInit) => Promise<Response>,
+    fileBodyFactory?: (uri: string) => Blob | undefined,
   ) {
     this.baseUrl = baseUrl
     this.requestImpl = requestImpl ?? ((url, init) => globalThis.fetch(url, init))
+    this.fileBodyFactory = fileBodyFactory
   }
 
   async upload(file: UploadFileHandle, intakeId: string): Promise<UploadedDocument> {
@@ -111,17 +117,30 @@ export class PresignedUploadService implements DocumentUploadService {
     }
 
     // 2. Resolve the local file bytes and PUT them directly to the presigned URL.
+    // A PUT without a body transfers no file content: S3 rejects an empty object
+    // handoff, so refuse to send one rather than fail the upload with a generic
+    // error after burning the short-lived presigned URL.
     const uri = file.uri
     if (!uri) {
       throw new DocumentUploadError('The document source is not available for upload.')
     }
 
-    const nativeFile = getNativeFile()
+    let body: Blob | undefined
+    if (this.fileBodyFactory) {
+      body = this.fileBodyFactory(uri)
+    } else {
+      const nativeFile = getNativeFile()
+      body = nativeFile ? (new nativeFile.File(uri) as unknown as Blob) : undefined
+    }
+    if (!body) {
+      throw new DocumentUploadError('The document source is not available for upload.')
+    }
+
     try {
       const put = await this.requestImpl(uploadUrl, {
         method: 'PUT',
         headers: { 'Content-Type': file.type || 'application/octet-stream' },
-        body: nativeFile ? (new nativeFile.File(uri) as unknown as BodyInit) : undefined,
+        body,
       })
       if (!put.ok) {
         throw new DocumentUploadError('The document could not be uploaded.')
