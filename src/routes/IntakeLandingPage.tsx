@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom'
+import { generateIntakeId } from '@cap/shared'
 import { Button } from '@/components/forms/Button'
 import { Container } from '@/components/layout'
 import { getContent } from '@/content'
@@ -9,8 +10,7 @@ export function IntakeLandingPage() {
   const { intakeLanding } = content
 
   const startIntake = () => {
-    const intakeId = crypto.randomUUID()
-    navigate(`/intake/${intakeId}`)
+    navigate(`/intake/${generateIntakeId()}`)
   }
 
   return (

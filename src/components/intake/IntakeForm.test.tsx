@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
@@ -40,6 +40,15 @@ describe('IntakeForm', () => {
       expect(screen.getByRole('heading', { name: /what zip code do you live in\?/i })).toBeInTheDocument()
     })
 
+    it('advances from the ZIP step on Enter instead of submitting early', async () => {
+      const user = userEvent.setup()
+      renderIntakeForm()
+
+      await user.type(screen.getByLabelText(/zip code/i), '80203{Enter}')
+
+      expect(screen.getByRole('heading', { name: /preferred language/i })).toBeInTheDocument()
+    })
+
     it('shows a step-of-total progress label', async () => {
       const user = userEvent.setup()
       renderIntakeForm()
@@ -63,6 +72,29 @@ describe('IntakeForm', () => {
 
       expect(englishRadio).toBeChecked()
       expect(spanishRadio).not.toBeChecked()
+    })
+
+    it('labels the language options as a group and shows both flags', async () => {
+      const user = userEvent.setup()
+      renderIntakeForm()
+
+      await user.type(screen.getByLabelText(/zip code/i), '80203')
+      await user.click(screen.getByRole('button', { name: /continue/i }))
+
+      expect(screen.getByRole('group', { name: /preferred language/i })).toBeInTheDocument()
+      expect(screen.getByTestId('language-flag-en')).toBeInTheDocument()
+      expect(screen.getByTestId('language-flag-es')).toBeInTheDocument()
+    })
+
+    it('updates the document language when Spanish is selected', async () => {
+      const user = userEvent.setup()
+      renderIntakeForm()
+
+      await user.type(screen.getByLabelText(/zip code/i), '80203')
+      await user.click(screen.getByRole('button', { name: /continue/i }))
+      await user.click(screen.getByRole('radio', { name: /spanish/i }))
+
+      expect(document.documentElement.lang).toBe('es')
     })
   })
 
@@ -104,10 +136,37 @@ describe('IntakeForm', () => {
       renderIntakeForm()
 
       await user.type(screen.getByLabelText(/zip code/i), '99999')
-      expect(screen.getByText(/couldn't find that zip code/i)).toBeInTheDocument()
+      expect(screen.getByRole('status')).toHaveTextContent(/couldn't find that zip code/i)
 
       await user.click(screen.getByRole('button', { name: /continue/i }))
       expect(screen.getByRole('heading', { name: /preferred language/i })).toBeInTheDocument()
+    })
+
+    it('clears a previous ZIP autofill when the ZIP becomes unknown', async () => {
+      const user = userEvent.setup()
+      renderIntakeForm()
+
+      await user.type(screen.getByLabelText(/zip code/i), '80203')
+      await user.clear(screen.getByLabelText(/zip code/i))
+      await user.type(screen.getByLabelText(/zip code/i), '99999')
+      await user.click(screen.getByRole('button', { name: /continue/i }))
+      await user.click(screen.getByRole('button', { name: /continue/i }))
+
+      expect(screen.getByLabelText(/city/i)).toHaveValue('')
+      expect(screen.getByLabelText(/state/i)).toHaveValue('')
+    })
+
+    it('clears a previous ZIP autofill when the ZIP is removed', async () => {
+      const user = userEvent.setup()
+      renderIntakeForm()
+
+      await user.type(screen.getByLabelText(/zip code/i), '80203')
+      await user.clear(screen.getByLabelText(/zip code/i))
+      await user.click(screen.getByRole('button', { name: /continue/i }))
+      await user.click(screen.getByRole('button', { name: /continue/i }))
+
+      expect(screen.getByLabelText(/city/i)).toHaveValue('')
+      expect(screen.getByLabelText(/state/i)).toHaveValue('')
     })
 
     it('rejects a non-five-digit ZIP with an accessible error', async () => {
@@ -171,7 +230,9 @@ describe('IntakeForm', () => {
       // documents step - skip, then submit
       await user.click(screen.getByRole('button', { name: /submit request/i }))
 
-      expect(await screen.findByRole('heading', { name: /request received/i })).toBeInTheDocument()
+      const successHeading = await screen.findByRole('heading', { name: /request received/i })
+      expect(successHeading).toBeInTheDocument()
+      await waitFor(() => expect(successHeading).toHaveFocus())
       expect(screen.getByText(/your reference number is:/i)).toBeInTheDocument()
       expect(screen.getByText(/cap-/i)).toBeInTheDocument()
     })

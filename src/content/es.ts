@@ -254,8 +254,8 @@ export const es: AllContent = {
       },
       chooseFiles: "Elegir archivos",
       remove: "Quitar",
-      skipLabel: "Puede saltar este paso y proporcionar documentos después.",
-      skipButtonLabel: "Saltar este paso",
+      skipLabel: "Puede proporcionar documentos más adelante.",
+      skipButtonLabel: "Borrar archivos seleccionados",
       maxFileSizeWarning: "El tamaño máximo de archivo es 10 MB por archivo.",
       maxTotalSizeWarning: "El tamaño total máximo de carga es 50 MB.",
       allowedTypesDescription:

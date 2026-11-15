@@ -5,7 +5,10 @@ import { Container } from '@/components/layout'
 import { IntakeProgress } from '@/components/navigation'
 import { getContent } from '@/content'
 import { INTAKE_STEP_COUNT, useIntakeNavigation } from '@/hooks/useIntakeNavigation'
-import { useEveryActionSubmission } from '@/hooks/useEveryActionSubmission'
+import {
+  useEveryActionSubmission,
+  type EveryActionSubmissionValues,
+} from '@/hooks/useEveryActionSubmission'
 import { useZipLookup } from '@/hooks/useZipLookup'
 import type { IntakeDocument, IntakeFormValues } from '@/types/index'
 import { createIntakeSchema } from '@/validation/intakeSchema'
@@ -19,6 +22,13 @@ import { SubmissionSuccess } from './SubmissionSuccess'
 import { ZipStep } from './ZipStep'
 
 const TOTAL_STEPS = INTAKE_STEP_COUNT
+
+function getFieldStep(field: string): number | undefined {
+  const entry = Object.entries(INTAKE_STEP_FIELDS).find(([, fields]) =>
+    fields.some((stepField) => stepField === field),
+  )
+  return entry ? Number(entry[0]) : undefined
+}
 
 function createInitialValues(): IntakeFormValues {
   return {
@@ -36,40 +46,81 @@ function createInitialValues(): IntakeFormValues {
   }
 }
 
+const INTAKE_FIELD_NAMES = new Set(Object.keys(createInitialValues()))
+
 interface IntakeFormProps {
   intakeId: string
 }
 
 export function IntakeForm({ intakeId }: IntakeFormProps) {
-  const { currentStep, goNext, goBack, canGoBack } = useIntakeNavigation(TOTAL_STEPS)
+  const { currentStep, goNext, goBack, goToStep, canGoBack } = useIntakeNavigation(TOTAL_STEPS)
   const { lookup } = useZipLookup()
   const submission = useEveryActionSubmission()
   const { status: submissionStatus, errorKind, referenceId } = submission
   const [submittedLanguage, setSubmittedLanguage] = useState<'en' | 'es'>('en')
+  const [activeLanguage, setActiveLanguage] = useState<'en' | 'es'>('en')
   const [zipNotice, setZipNotice] = useState('')
   const [triedToContinue, setTriedToContinue] = useState(false)
+  const [isUploadingDocuments, setIsUploadingDocuments] = useState(false)
+  const [isRetrying, setIsRetrying] = useState(false)
+  const [serverFieldErrors, setServerFieldErrors] = useState<
+    Partial<Record<keyof IntakeFormValues, string>>
+  >({})
   const stepHeadingRef = useRef<HTMLHeadingElement>(null)
   const languageRef = useRef<'en' | 'es'>('en')
   const errorSummaryFocusedRef = useRef(false)
+  const autofilledAddressRef = useRef<{ city: string; state: string } | null>(null)
+  const lastSubmissionRef = useRef<EveryActionSubmissionValues | null>(null)
 
   useEffect(() => {
     if (currentStep === 0) return
     stepHeadingRef.current?.focus()
   }, [currentStep])
 
-  const submissionError: 'error' | 'networkError' = errorKind === 'networkError' ? 'networkError' : 'error'
+  useEffect(() => {
+    const previousLanguage = document.documentElement.lang
+    document.documentElement.lang = activeLanguage
+    return () => {
+      document.documentElement.lang = previousLanguage
+    }
+  }, [activeLanguage])
 
   const handleSubmission = async (values: IntakeFormValues) => {
+    const payload = { intakeId, ...values }
     setSubmittedLanguage(values.language)
-    await submission.submit({ intakeId, ...values })
+    lastSubmissionRef.current = payload
+    return submission.submit(payload)
   }
 
-  const handleRetry = () => {
-    submission.reset()
+  const handleRetry = async () => {
+    const lastSubmission = lastSubmissionRef.current
+    if (!lastSubmission) {
+      submission.reset()
+      return
+    }
+
+    setIsRetrying(true)
+    setSubmittedLanguage(lastSubmission.language)
+    try {
+      await submission.submit(lastSubmission)
+    } finally {
+      setIsRetrying(false)
+    }
   }
 
   if (submissionStatus === 'success') {
     return <SubmissionSuccess language={submittedLanguage} referenceId={referenceId} />
+  }
+
+  if (submissionStatus === 'error' || isRetrying) {
+    return (
+      <SubmissionError
+        language={submittedLanguage}
+        kind={errorKind}
+        onRetry={handleRetry}
+        isLoading={isRetrying}
+      />
+    )
   }
 
   return (
@@ -78,13 +129,17 @@ export function IntakeForm({ intakeId }: IntakeFormProps) {
       validationSchema={() => createIntakeSchema(getContent(languageRef.current))}
       onSubmit={handleSubmission}
     >
-      {({ values, touched, handleChange, handleBlur, setFieldValue, setFieldError, setTouched, validateForm }) => {
+      {({
+        values,
+        touched,
+        handleChange,
+        handleBlur,
+        setFieldValue,
+        setTouched,
+        validateForm,
+      }) => {
         languageRef.current = values.language
         const content = getContent(values.language)
-
-        if (submissionStatus === 'error') {
-          return <SubmissionError language={values.language} kind={submissionError} onRetry={handleRetry} />
-        }
 
         const stepTitles = [
           content.intakeForm.stepLabels.zip,
@@ -109,13 +164,43 @@ export function IntakeForm({ intakeId }: IntakeFormProps) {
           apartment: content.intakeForm.contact.fields.address2.label,
           city: content.intakeForm.contact.fields.city.label,
           state: content.intakeForm.contact.fields.state.label,
+          documents: content.intakeForm.documents.heading,
         }
 
         const focusTargets: Record<string, string> = {
           language: 'language-en',
         }
 
+        const clearServerFieldError = (field: string) => {
+          setServerFieldErrors((current) => {
+            if (!(field in current)) return current
+            const next = { ...current }
+            delete next[field as keyof IntakeFormValues]
+            return next
+          })
+        }
+
+        const handleFieldChange = (event: ChangeEvent<HTMLInputElement>) => {
+          handleChange(event)
+          clearServerFieldError(event.target.name)
+        }
+
+        const handleLanguageChange = (event: ChangeEvent<HTMLInputElement>) => {
+          handleChange(event)
+          clearServerFieldError('language')
+          const nextLanguage = event.target.value
+          if (nextLanguage === 'en' || nextLanguage === 'es') {
+            setActiveLanguage(nextLanguage)
+          }
+        }
+
         const stepErrors: IntakeFieldErrors = validateIntakeStep(currentStep, values, content.intakeForm.errors)
+        for (const field of INTAKE_STEP_FIELDS[currentStep] ?? []) {
+          const serverError = serverFieldErrors[field]
+          if (serverError) {
+            stepErrors[field] = serverError
+          }
+        }
 
         const errorEntries: ErrorSummaryEntry[] = (Object.keys(stepErrors) as Array<keyof IntakeFormValues>).map(
           (field) => ({
@@ -137,13 +222,26 @@ export function IntakeForm({ intakeId }: IntakeFormProps) {
               value: nextZip,
             },
           })
+          clearServerFieldError('zipCode')
 
           const { location } = lookup(nextZip)
           if (location) {
             setFieldValue('city', location.city)
             setFieldValue('state', location.state)
+            autofilledAddressRef.current = { city: location.city, state: location.state }
             setZipNotice('')
             return
+          }
+
+          const autofilledAddress = autofilledAddressRef.current
+          if (autofilledAddress) {
+            if (values.city === autofilledAddress.city) {
+              setFieldValue('city', '')
+            }
+            if (values.state === autofilledAddress.state) {
+              setFieldValue('state', '')
+            }
+            autofilledAddressRef.current = null
           }
 
           if (nextZip.length === 5) {
@@ -154,13 +252,15 @@ export function IntakeForm({ intakeId }: IntakeFormProps) {
         }
 
         const handleAddDocuments = (newDocuments: IntakeDocument[]) => {
-          setFieldValue('documents', [...values.documents, ...newDocuments])
+          setFieldValue('documents', (currentDocuments: IntakeDocument[] = []) => [
+            ...currentDocuments,
+            ...newDocuments,
+          ])
         }
 
         const handleRemoveDocument = (documentId: string) => {
-          setFieldValue(
-            'documents',
-            values.documents.filter((document) => document.id !== documentId),
+          setFieldValue('documents', (currentDocuments: IntakeDocument[] = []) =>
+            currentDocuments.filter((document) => document.id !== documentId),
           )
         }
 
@@ -170,14 +270,11 @@ export function IntakeForm({ intakeId }: IntakeFormProps) {
 
         const handleNext = async () => {
           if (Object.keys(stepErrors).length > 0) {
-            ;(Object.keys(stepErrors) as Array<keyof IntakeFormValues>).forEach((field) => {
-              setFieldError(field, stepErrors[field])
-            })
             const touchedFields: Record<string, boolean> = {}
             Object.keys(stepErrors).forEach((field) => {
               touchedFields[field] = true
             })
-            setTouched(touchedFields)
+            setTouched({ ...touched, ...touchedFields })
             errorSummaryFocusedRef.current = false
             setTriedToContinue(true)
             return
@@ -186,9 +283,7 @@ export function IntakeForm({ intakeId }: IntakeFormProps) {
           setTriedToContinue(false)
 
           if (currentStep < totalSteps - 1) {
-            INTAKE_STEP_FIELDS[currentStep].forEach((field) => {
-              setFieldError(field, undefined)
-            })
+            setServerFieldErrors({})
             setZipNotice('')
             goNext()
             return
@@ -196,20 +291,57 @@ export function IntakeForm({ intakeId }: IntakeFormProps) {
 
           const fullErrors = await validateForm()
           if (Object.keys(fullErrors).length > 0) {
+            const nextServerFieldErrors: Partial<Record<keyof IntakeFormValues, string>> = {}
             const touchedFields: Record<string, boolean> = {}
-            Object.keys(fullErrors).forEach((field) => {
+            ;(Object.keys(fullErrors) as Array<keyof IntakeFormValues>).forEach((field) => {
+              const message = fullErrors[field]
+              if (typeof message === 'string') {
+                nextServerFieldErrors[field] = message
+              }
               touchedFields[field] = true
             })
-            setTouched(touchedFields)
+            setServerFieldErrors(nextServerFieldErrors)
+            setTouched({ ...touched, ...touchedFields })
+            const firstInvalidStep = getFieldStep(Object.keys(fullErrors)[0] ?? '')
+            if (firstInvalidStep !== undefined) {
+              goToStep(firstInvalidStep)
+            }
+            errorSummaryFocusedRef.current = false
             setTriedToContinue(true)
             return
           }
 
-          await handleSubmission(values)
+          const result = await handleSubmission(values)
+          if (!result) return
+
+          if (!result.success && result.fieldErrors) {
+            const fieldErrorEntries = Object.entries(result.fieldErrors).filter(([field]) =>
+              INTAKE_FIELD_NAMES.has(field),
+            ) as Array<[keyof IntakeFormValues, string]>
+
+            if (fieldErrorEntries.length > 0) {
+              const nextServerFieldErrors: Partial<Record<keyof IntakeFormValues, string>> = {}
+              const touchedFields: Record<string, boolean> = {}
+              for (const [field, message] of fieldErrorEntries) {
+                nextServerFieldErrors[field] = message
+                touchedFields[field] = true
+              }
+              setServerFieldErrors(nextServerFieldErrors)
+              setTouched({ ...touched, ...touchedFields })
+              const firstInvalidStep = getFieldStep(fieldErrorEntries[0][0])
+              if (firstInvalidStep !== undefined) {
+                goToStep(firstInvalidStep)
+              }
+              errorSummaryFocusedRef.current = false
+              setTriedToContinue(true)
+              submission.reset()
+            }
+          }
         }
 
         const handleBack = () => {
           setTriedToContinue(false)
+          setServerFieldErrors({})
           goBack()
         }
 
@@ -235,7 +367,14 @@ export function IntakeForm({ intakeId }: IntakeFormProps) {
               </div>
             </div>
 
-            <Form className="space-y-6 rounded-2xl border border-cap-secondary/40 bg-white p-5 shadow-sm sm:p-8">
+            <Form
+              noValidate
+              className="space-y-6 rounded-2xl border border-cap-secondary/40 bg-white p-5 shadow-sm sm:p-8"
+              onSubmit={(event) => {
+                event.preventDefault()
+                void handleNext()
+              }}
+            >
               {showErrorSummary && (
                 <ErrorSummary
                   heading={content.intakeForm.errors.errorSummaryHeading}
@@ -265,7 +404,7 @@ export function IntakeForm({ intakeId }: IntakeFormProps) {
                   value={values.language}
                   errors={stepErrors}
                   touched={touched}
-                  onChange={handleChange}
+                  onChange={handleLanguageChange}
                   onBlur={handleBlur}
                 />
               )}
@@ -276,7 +415,7 @@ export function IntakeForm({ intakeId }: IntakeFormProps) {
                   values={values}
                   errors={stepErrors}
                   touched={touched}
-                  onChange={handleChange}
+                  onChange={handleFieldChange}
                   onBlur={handleBlur}
                 />
               )}
@@ -289,6 +428,7 @@ export function IntakeForm({ intakeId }: IntakeFormProps) {
                   onAddDocuments={handleAddDocuments}
                   onRemoveDocument={handleRemoveDocument}
                   onClearDocuments={handleClearDocuments}
+                  onUploadingChange={setIsUploadingDocuments}
                 />
               )}
 
@@ -312,7 +452,7 @@ export function IntakeForm({ intakeId }: IntakeFormProps) {
                     type="button"
                     size="lg"
                     onClick={handleNext}
-                    disabled={submissionStatus === 'loading'}
+                    disabled={submissionStatus === 'loading' || isUploadingDocuments}
                   >
                     {submissionStatus === 'loading'
                       ? content.submission.submitting.label

@@ -41,7 +41,10 @@ export function ZipStep({ content, values, errors, touched, zipNotice, onZipChan
       </FormField>
 
       {zipNotice && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+        <div
+          role="status"
+          className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900"
+        >
           {zipNotice}
         </div>
       )}

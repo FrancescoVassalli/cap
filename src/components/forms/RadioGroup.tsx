@@ -1,10 +1,11 @@
-import type { InputHTMLAttributes } from 'react'
+import type { InputHTMLAttributes, ReactNode } from 'react'
 import { forwardRef } from 'react'
 import { clsx } from 'clsx'
 
 interface RadioOption {
   value: string
   label: string
+  icon?: ReactNode
 }
 
 interface RadioGroupProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'type' | 'name' | 'value' | 'checked'> {
@@ -14,6 +15,7 @@ interface RadioGroupProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 't
   value?: string
   isInvalid?: boolean
   orientation?: 'horizontal' | 'vertical'
+  legend?: string
 }
 
 const radioBaseStyles =
@@ -27,7 +29,16 @@ const invalidStyles =
 
 export const RadioGroup = forwardRef<HTMLInputElement, RadioGroupProps>(
   (
-    { name, options, value, isInvalid = false, orientation = 'vertical', className, ...props },
+    {
+      name,
+      options,
+      value,
+      isInvalid = false,
+      orientation = 'vertical',
+      legend,
+      className,
+      ...props
+    },
     ref
   ) => {
     return (
@@ -38,8 +49,14 @@ export const RadioGroup = forwardRef<HTMLInputElement, RadioGroupProps>(
           className
         )}
       >
+        {legend && <legend className="sr-only">{legend}</legend>}
         {options.map((option) => (
           <div key={option.value} className="flex items-center gap-2">
+            {option.icon && (
+              <span aria-hidden="true" className="shrink-0">
+                {option.icon}
+              </span>
+            )}
             <input
               ref={ref}
               id={`${name}-${option.value}`}

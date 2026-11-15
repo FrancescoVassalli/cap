@@ -1,22 +1,13 @@
-import { useParams, type NavigateFunction } from 'react-router-dom'
-import { Button } from '@/components/forms/Button'
+import { Navigate, useParams } from 'react-router-dom'
 import { IntakeForm } from '@/components/intake/IntakeForm'
+import { isValidIntakeId } from './intakeId'
 
 export function IntakePage() {
   const { id } = useParams<{ id: string }>()
 
-  return <IntakeForm intakeId={id ?? ''} />
-}
-
-export function IntakeStartButton({ navigate, label }: { navigate: NavigateFunction; label: string }) {
-  const beginIntake = () => {
-    const intakeId = crypto.randomUUID()
-    navigate(`/intake/${intakeId}`)
+  if (!isValidIntakeId(id)) {
+    return <Navigate to="/intake" replace />
   }
 
-  return (
-    <Button type="button" onClick={beginIntake}>
-      {label}
-    </Button>
-  )
+  return <IntakeForm intakeId={id} />
 }

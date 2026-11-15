@@ -32,10 +32,11 @@ export function validateDocumentFiles(
   const errorMessages = content.intakeForm.errors
   const result = validateDocumentCandidates(files, existingDocuments, errorMessages)
 
-  // The shared validator dedupes by name+size within the batch, so mapping each
-  // accepted candidate back to its original File is unambiguous.
-  const acceptedKeys = new Set(result.accepted.map((file) => `${file.name}-${file.size}`))
-  const accepted = files.filter((file) => acceptedKeys.has(`${file.name}-${file.size}`))
+  // The shared validator returns the original candidate objects it accepted.
+  // Match by identity so duplicate name+size files are not both treated as
+  // accepted when only one of them passed the type/size/total checks.
+  const acceptedCandidates = new Set<unknown>(result.accepted)
+  const accepted = files.filter((file) => acceptedCandidates.has(file))
 
   return { accepted, errors: result.errors }
 }

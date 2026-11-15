@@ -12,6 +12,7 @@ export type EveryActionSubmissionState = {
   status: 'idle' | 'loading' | 'success' | 'error'
   errorKind: 'error' | 'networkError' | 'sessionExpired'
   referenceId: string
+  fieldErrors: Record<string, string>
   started: boolean
 }
 
@@ -19,6 +20,7 @@ const INITIAL_STATE: EveryActionSubmissionState = {
   status: 'idle',
   errorKind: 'error',
   referenceId: '',
+  fieldErrors: {},
   started: false,
 }
 
@@ -42,6 +44,7 @@ export function useEveryActionSubmission(deps: Services = services) {
       status: 'loading',
       errorKind: 'error',
       referenceId: '',
+      fieldErrors: {},
       started: true,
     })
 
@@ -68,6 +71,7 @@ export function useEveryActionSubmission(deps: Services = services) {
           status: 'error',
           errorKind: result.errorKind ?? 'error',
           referenceId: '',
+          fieldErrors: result.fieldErrors ?? {},
           started: true,
         })
         return result
@@ -77,13 +81,20 @@ export function useEveryActionSubmission(deps: Services = services) {
         status: 'success',
         errorKind: 'error',
         referenceId: result.referenceId || 'CAP-0000',
+        fieldErrors: {},
         started: true,
       })
       return result
     } catch (error) {
       const kind: EveryActionSubmissionState['errorKind'] =
         error instanceof SubmissionError ? error.kind : 'networkError'
-      setState({ status: 'error', errorKind: kind, referenceId: '', started: true })
+      setState({
+        status: 'error',
+        errorKind: kind,
+        referenceId: '',
+        fieldErrors: {},
+        started: true,
+      })
       return { success: false as const, errorKind: kind }
     } finally {
       inFlightRef.current = false

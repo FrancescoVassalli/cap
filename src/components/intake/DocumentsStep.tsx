@@ -1,4 +1,4 @@
-import { useState, type ChangeEvent } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { Button } from '@/components/forms/Button'
 import { FileInput } from '@/components/forms/FileInput'
 import { FormField } from '@/components/forms/FormField'
@@ -14,6 +14,7 @@ interface DocumentsStepProps {
   onAddDocuments: (documents: IntakeDocument[]) => void
   onRemoveDocument: (documentId: string) => void
   onClearDocuments: () => void
+  onUploadingChange?: (uploading: boolean) => void
 }
 
 function formatFileSize(bytes: number) {
@@ -29,9 +30,34 @@ export function DocumentsStep({
   onAddDocuments,
   onRemoveDocument,
   onClearDocuments,
+  onUploadingChange,
 }: DocumentsStepProps) {
   const [documentErrors, setDocumentErrors] = useState<string[]>([])
+  const [isUploading, setIsUploading] = useState(false)
+  const uploadsInFlightRef = useRef(0)
   const { upload } = useDocumentUpload()
+
+  useEffect(() => {
+    onUploadingChange?.(isUploading)
+  }, [isUploading, onUploadingChange])
+
+  useEffect(() => {
+    return () => onUploadingChange?.(false)
+  }, [onUploadingChange])
+
+  const startUploading = () => {
+    uploadsInFlightRef.current += 1
+    if (uploadsInFlightRef.current === 1) {
+      setIsUploading(true)
+    }
+  }
+
+  const finishUploading = () => {
+    uploadsInFlightRef.current = Math.max(0, uploadsInFlightRef.current - 1)
+    if (uploadsInFlightRef.current === 0) {
+      setIsUploading(false)
+    }
+  }
 
   const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const selected = Array.from(event.target.files ?? [])
@@ -42,19 +68,29 @@ export function DocumentsStep({
 
     if (result.accepted.length === 0) return
 
-    const uploaded: IntakeDocument[] = []
-    for (const file of result.accepted) {
-      const attempt = await upload(file, intakeId)
-      if (attempt.error) {
-        setDocumentErrors((current) => [...current, content.intakeForm.errors.generic])
-        continue
+    startUploading()
+    try {
+      const uploaded: IntakeDocument[] = []
+      for (const file of result.accepted) {
+        const attempt = await upload(file, intakeId)
+        if (attempt.error) {
+          setDocumentErrors((current) => [...current, content.intakeForm.errors.generic])
+          continue
+        }
+        uploaded.push(attempt.document)
       }
-      uploaded.push(attempt.document)
-    }
 
-    if (uploaded.length > 0) {
-      onAddDocuments(uploaded)
+      if (uploaded.length > 0) {
+        onAddDocuments(uploaded)
+      }
+    } finally {
+      finishUploading()
     }
+  }
+
+  const handleClearDocuments = () => {
+    setDocumentErrors([])
+    onClearDocuments()
   }
 
   const documentsContent = content.intakeForm.documents
@@ -111,7 +147,13 @@ export function DocumentsStep({
                 <p className="font-medium text-slate-900">{document.name}</p>
                 <p className="text-xs text-slate-600">{formatFileSize(document.size)}</p>
               </div>
-              <Button type="button" variant="outline" size="sm" onClick={() => onRemoveDocument(document.id)}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => onRemoveDocument(document.id)}
+                aria-label={`${documentsContent.remove} ${document.name}`}
+              >
                 {documentsContent.remove}
               </Button>
             </li>
@@ -121,13 +163,15 @@ export function DocumentsStep({
 
       <div className="space-y-1">
         <p className="text-sm text-slate-600">{documentsContent.skipLabel}</p>
-        <button
-          type="button"
-          className="text-sm font-medium text-cap-primary underline underline-offset-2"
-          onClick={onClearDocuments}
-        >
-          {documentsContent.skipButtonLabel}
-        </button>
+        {documents.length > 0 && (
+          <button
+            type="button"
+            className="text-sm font-medium text-cap-primary underline underline-offset-2"
+            onClick={handleClearDocuments}
+          >
+            {documentsContent.skipButtonLabel}
+          </button>
+        )}
       </div>
     </div>
   )

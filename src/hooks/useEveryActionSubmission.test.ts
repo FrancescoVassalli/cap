@@ -82,6 +82,30 @@ describe('useEveryActionSubmission', () => {
     expect(result.current.errorKind).toBe('error')
   })
 
+  it('preserves server field errors for the form to display', async () => {
+    const submission: SubmissionService = {
+      async submit() {
+        return {
+          success: false,
+          errorKind: 'error',
+          message: 'Check the highlighted fields.',
+          fieldErrors: { email: 'That email is already in use.', phone: 'Invalid phone.' },
+        }
+      },
+    }
+    const { result } = renderHook(() => useEveryActionSubmission(makeDeps(submission)))
+
+    await act(async () => {
+      await result.current.submit(values)
+    })
+
+    expect(result.current.status).toBe('error')
+    expect(result.current.fieldErrors).toEqual({
+      email: 'That email is already in use.',
+      phone: 'Invalid phone.',
+    })
+  })
+
   it('maps thrown SubmissionError kinds to an error state', async () => {
     const submission: SubmissionService = {
       async submit() {
