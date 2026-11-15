@@ -1,3 +1,5 @@
+> **Archived:** historical agent orchestration guide for the completed frontend build. Current scope is in [planning/master.md](../../planning/master.md); open work is in [planning/handoffs.md](../../planning/handoffs.md).
+
 # Agent Orchestration 
 Here is a orchestration guide for creating agents to implement the [frontend implementation plan](./frontend-implementation.md)
 

@@ -1,8 +1,10 @@
-# CAP Design System Documentation
+# CAP Design System Reference
 
 ## Overview
 
-The CAP design system provides a complete, accessible, mobile-first UI foundation for the Consumer Assistance Program frontend. All components follow WCAG 2.2 AA accessibility standards and are optimized for phone-based form completion.
+The CAP design system provides the accessible, mobile-first UI foundation for the Consumer Assistance Program frontend. All components target WCAG 2.2 AA and are optimized for phone-based form completion.
+
+This is a reference for the implemented design system. Product scope lives in [planning/master.md](../planning/master.md); completed status and open work are tracked in [architecture/master.md](../architecture/master.md) and [planning/handoffs.md](../planning/handoffs.md).
 
 ## Installation
 
@@ -386,6 +388,8 @@ All components are optimized for:
 - **Tablet** (768px–1023px): Adaptive spacing and layout
 - **Desktop** (1024px+): Full navigation and multi-column layouts
 
+Browser support: current Chrome, Firefox, Safari, Edge, iOS Safari, and Android Chrome. Vite's modern production targets are acceptable unless CAP explicitly needs older browsers; in that case, change the build target and retest.
+
 ## Using with Formik
 
 All primitives work directly with Formik's field state:
@@ -448,19 +452,12 @@ Use Tailwind's utility classes for quick modifications without breaking the desi
 
 These remain the responsibility of downstream page and intake form components.
 
-## Definition of Done
+## Change checklist
 
-The design system is complete and ready for intake form work when:
-- ✓ All primitives are implemented and tested
-- ✓ Styling matches CAP/CCHI visual direction
-- ✓ Mobile-first design is verified on real phones
-- ✓ All WCAG 2.2 AA requirements are met
-- ✓ Components have clear, stable APIs
-- ✓ Build, lint, test, and typecheck all pass
-- ✓ Documentation is complete and examples work
-- ✓ Downstream page agents can compose without redesigning the UI layer
-
----
-
-**Last Updated**: 2026-08-29
-**Status**: Ready for Integration and Content work
+When changing a primitive or token:
+- ✓ Keep the component API stable unless the change is intentional and documented here
+- ✓ Preserve CAP/CCHI visual direction and brand tokens
+- ✓ Verify mobile-first behavior
+- ✓ Maintain WCAG 2.2 AA behavior
+- ✓ Run `npm test`, `npm run build`, `npm run lint`, and `npm run typecheck`
+- ✓ Update the examples in this reference

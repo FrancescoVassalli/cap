@@ -1,3 +1,5 @@
+> **Archived:** historical API implementation plan. The backend is deployed; current contract is in [planning/master.md](../../planning/master.md), status in [architecture/master.md](../../architecture/master.md), and open work in [planning/handoffs.md](../../planning/handoffs.md).
+
 ## Plan: CAP API Integration
 
 TL;DR: Add a small production API behind the existing service boundary so the frontend can continue using the `SubmissionService` and `DocumentUploadService` abstractions without UI changes. The backend should support a real intake submission endpoint, presigned document uploads, and a local mock mode for frontend development. Keep the API stateless, HTTPS-only, and idempotent so it can safely receive sensitive intake data from a static React app hosted on S3.
@@ -5,7 +7,7 @@ TL;DR: Add a small production API behind the existing service boundary so the fr
 ### Steps
 1. Define the API contract and deployment model
    - Confirm the frontend can select the runtime mode via environment variables such as `VITE_CAP_SUBMISSION_MODE`, `VITE_CAP_UPLOAD_MODE`, and `VITE_CAP_API_BASE_URL`.
-   - Use the existing adapter pattern in [src/services/submissionService.ts](src/services/submissionService.ts) and [src/services/documentUploadService.ts](src/services/documentUploadService.ts) as the contract boundary.
+   - Use the existing adapter pattern in [src/services/submissionService.ts](../../src/services/submissionService.ts) and [src/services/documentUploadService.ts](../../src/services/documentUploadService.ts) as the contract boundary.
    - Keep the public contract shaped around the current app payload: `intakeId`, language, demographics, address, and optional documents metadata.
    - Dependencies: none; this is the foundation for all downstream work.
 
@@ -55,12 +57,12 @@ TL;DR: Add a small production API behind the existing service boundary so the fr
    - Dependencies: all previous steps.
 
 ### Relevant files and architecture touchpoints
-- [src/services/submissionService.ts](src/services/submissionService.ts) — real API adapter shape, DDoS-safe request/response mapping, idempotency contract.
-- [src/services/documentUploadService.ts](src/services/documentUploadService.ts) — presigned upload contract and client-side adapter behavior.
-- [src/services/index.ts](src/services/index.ts) — runtime selection of mock vs email vs API adapters.
-- [src/hooks/useIntakeSubmission.ts](src/hooks/useIntakeSubmission.ts) — current lifecycle handling for idle/loading/success/error states.
-- [src/types/index.ts](src/types/index.ts) — typed backend-facing response contracts and error categories.
-- [src/data/zipCodes.json](src/data/zipCodes.json) — example of dataset-backed front-end lookups; can be mirrored for backend validation if needed.
+- [src/services/submissionService.ts](../../src/services/submissionService.ts) — real API adapter shape, DDoS-safe request/response mapping, idempotency contract.
+- [src/services/documentUploadService.ts](../../src/services/documentUploadService.ts) — presigned upload contract and client-side adapter behavior.
+- [src/services/index.ts](../../src/services/index.ts) — runtime selection of mock vs email vs API adapters.
+- [src/hooks/useIntakeSubmission.ts](../../src/hooks/useIntakeSubmission.ts) — current lifecycle handling for idle/loading/success/error states.
+- [src/types/index.ts](../../src/types/index.ts) — typed backend-facing response contracts and error categories.
+- [src/data/zipCodes.json](../../src/data/zipCodes.json) — example of dataset-backed front-end lookups; can be mirrored for backend validation if needed.
 
 ### Decision points
 - Prefer a serverless AWS Lambda API for the first production version because the frontend is static and the intake process is not CPU-heavy.

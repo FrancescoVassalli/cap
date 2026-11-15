@@ -1,3 +1,5 @@
+> **Archived:** historical React Native implementation plan. The app is implemented; release work is in [planning/mobile-release.md](../../planning/mobile-release.md), status in [architecture/react-native.md](../../architecture/react-native.md).
+
 React Native plan for CAP
 The safest approach is to keep the web app and mobile app aligned around the same domain model and submission contract, while letting each platform use native UI patterns. The current repo already has the right separation in src/types/index.ts, src/services/submissionService.ts, and src/routes/AppRouter.tsx, so the mobile build should extend that pattern instead of reinventing it.
 

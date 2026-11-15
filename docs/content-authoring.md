@@ -1,6 +1,6 @@
-# Content Layer Integration Guide for Downstream Agents
+# Content Layer Guide
 
-This document explains how the Navigation Agent, Informational Pages Agent, Intake Form Agent, and other page components should use the content layer that the Content + Localization Agent has created.
+This document explains how components use the implemented content layer and how to add or change copy. The content layer is the source of truth for user-facing text and keeps English and Spanish in sync.
 
 ## Quick Start
 
@@ -293,7 +293,7 @@ if (isSupportedLanguage(userLanguage)) {
 
 ## Design System Coordination
 
-The **Design System Agent** has created form primitives (`TextInput`, `Button`, etc.) that all expect:
+The form primitives (`TextInput`, `Button`, etc.) in [design-system.md](./design-system.md) expect:
 - `label` from content
 - `placeholder` from content
 - `error` message from content.intakeForm.errors
@@ -313,9 +313,9 @@ const contactFields = content.intakeForm.contact.fields;
 />
 ```
 
-## Questions?
+## References
 
-Refer to:
 - `src/content/USAGE.md` for detailed examples
 - `src/content/types.ts` for complete interface definitions
-- `planning/frontend-implementation.md` for copy context and requirements
+- [planning/master.md](../planning/master.md) for product scope and requirements
+- [docs/archive/frontend-implementation.md](./archive/frontend-implementation.md) for historical copy context

@@ -1,3 +1,5 @@
+> **Archived:** historical implementation audit. Current status is in [architecture/master.md](../../architecture/master.md); open work is in [planning/handoffs.md](../../planning/handoffs.md).
+
 # Implementation Audit
 
 ## Purpose

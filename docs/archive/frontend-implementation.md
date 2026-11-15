@@ -1,3 +1,5 @@
+> **Archived:** historical implementation guide. The app is implemented; current scope is in [planning/master.md](../../planning/master.md), status in [architecture/master.md](../../architecture/master.md), and open work in [planning/handoffs.md](../../planning/handoffs.md).
+
 # Consumer Assistance Program Frontend Implementation Guide
 
 ## 1. Purpose
@@ -275,6 +277,28 @@ Define semantic tokens as well:
 The semantic layer prevents the application from coupling every component directly to brand colors.
 
 ---
+
+#### Define loading/error/empty/success states
+
+Every data-dependent action should have:
+
+idle
+loading
+success
+error
+
+For the intake process, specifically define:
+
+submission failure
+network interruption
+duplicate submission
+server validation failure
+session expiration
+successful submission
+
+The success screen should tell the user what happens next, rather than simply saying "Thank you."
+
+That maps nicely to the real CAP workflow, where staff subsequently contact the consumer and may request authorization and documents
 
 # 7. Typography
 

@@ -10,8 +10,10 @@ The implementation covers the planned public journey:
 
 `Home / How We Help` → `Intake landing` → `Intake flow` → `Review` → `Submit` → `Success`.
 
-The code is locally verified. Live API verification and physical-device QA are
-still release activities requiring external infrastructure and devices.
+The code is locally verified. Submission and presigned upload were verified
+against the live API. Physical-device QA and the Google Play release are still
+external release activities; the active plan is
+[../planning/mobile-release.md](../planning/mobile-release.md).
 
 ## Package boundaries
 
@@ -77,21 +79,25 @@ URL, then PUT bytes directly to the returned URL using `expo-file-system`.
 The mobile package has a node-based Vitest suite for pure and adapter logic:
 
 - `npm run typecheck` — clean
-- `npx vitest run` — 26/26 tests green
-- `npx expo export --platform android` — successful 873-module bundle
+- `npm test` — green
+- `npx expo export --platform android` — successful bundle
 
 The shared/web verification remains green with the shared contract:
 
 - Root `tsc -b` — clean
-- Web Vitest — 154/154 tests green
+- Web Vitest — green
 - `npm run build` — successful
 
-## Deferred release work
+## Remaining release work
 
-- Run API submission and presigned upload against the deployed backend with live
-  `EXPO_PUBLIC_CAP_*` values and infrastructure credentials.
-- Test keyboard/safe-area behavior, camera/document picking, upload recovery,
-  and complete submission on iOS and Android devices or emulators.
+Remaining release work is tracked in
+[../planning/handoffs.md](../planning/handoffs.md) and
+[../planning/mobile-release.md](../planning/mobile-release.md). In summary:
+
+- Android on-device QA for keyboard/safe-area behavior, camera/document picking,
+  upload recovery, and complete submission.
+- Google Play release engineering: Play Console account, EAS project, assets,
+  `eas.json`, Expo SDK modernization, and a stable production API URL.
 - Add rendered component tests if mobile UI regression coverage is required.
 - Add SecureStore only when a non-PHI authenticated session/resumption flow
   exists; the current no-persistence design intentionally stores no intake data.
