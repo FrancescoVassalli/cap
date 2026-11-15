@@ -134,9 +134,15 @@ function Invoke-Aws {
 }
 
 function Test-AwsAuth {
-    # Redirect stderr to null so a failure does not raise a terminating
-    # NativeCommandError under $ErrorActionPreference='Stop'.
-    $out = & aws sts get-caller-identity 2>$null
+    # The 'Continue' guard keeps a native stderr write from escalating into a
+    # terminating NativeCommandError under this script's 'Stop' preference.
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $out = & aws sts get-caller-identity 2>$null
+    } finally {
+        $ErrorActionPreference = $previous
+    }
     if ($LASTEXITCODE -ne 0) {
         Write-Host 'AWS CLI is not authenticated for this session.'
         return $false
@@ -149,12 +155,26 @@ function Test-AwsAuth {
 # deployable and reports whether it is available, without failing the check.
 function Test-S3Access([string]$bucket) {
     if ([string]::IsNullOrWhiteSpace($bucket)) { return $false }
-    $null = & aws s3api head-bucket --bucket $bucket --region $Region 2>$null
-    return ($LASTEXITCODE -eq 0)
+    # The 'Continue' guard keeps a native stderr write (e.g. a 403/404 from
+    # head-bucket) from becoming a terminating NativeCommandError under 'Stop'.
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $null = & aws s3api head-bucket --bucket $bucket --region $Region 2>$null
+        return ($LASTEXITCODE -eq 0)
+    } finally {
+        $ErrorActionPreference = $previous
+    }
 }
 function Test-LambdaAccess {
-    $null = & aws lambda list-functions --region $Region 2>$null
-    return ($LASTEXITCODE -eq 0)
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $null = & aws lambda list-functions --region $Region 2>$null
+        return ($LASTEXITCODE -eq 0)
+    } finally {
+        $ErrorActionPreference = $previous
+    }
 }
 function Test-ApiGatewayAccess {
     # Read gate for the public HTTP API layer. Both v1 (REST) and v2 (HTTP) are
@@ -218,9 +238,17 @@ function Test-LambdaFunctionExists([string]$fn) {
 # still-Applying code update. Times out after $TimeoutSec seconds.
 function Wait-LambdaReady([string]$fn, [int]$TimeoutSec = 120) {
     $deadline = (Get-Date).AddSeconds($TimeoutSec)
-    if (-not $TimeoutSec) { Write-Err 'Wait-LambdaReady requires a positive TimeoutSec.' }
+    if (-not $TimeoutSec) { Get-Err 'Wait-LambdaReady requires a positive TimeoutSec.' }
     while ((Get-Date) -lt $deadline) {
-        $status = (& aws lambda get-function --function-name $fn --region $Region --query 'Configuration.LastUpdateStatus' --output text 2>$null)
+        # Guard so a not-found (stderr) does not throw a terminating
+        # NativeCommandError under 'Stop'; the exit code is checked below.
+        $previous = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        try {
+            $status = (& aws lambda get-function --function-name $fn --region $Region --query 'Configuration.LastUpdateStatus' --output text 2>$null)
+        } finally {
+            $ErrorActionPreference = $previous
+        }
         if ($LASTEXITCODE -ne 0) {
             # Function not found yet (just created) - treat as not ready.
             Start-Sleep -Seconds 2
@@ -347,7 +375,15 @@ if ($Frontend) {
 
     if (-not [string]::IsNullOrWhiteSpace($CloudFrontId)) {
         Get-Step 'Invalidating CloudFront cache'
-        $null = & aws cloudfront create-invalidation --distribution-id $CloudFrontId --paths '/*' --region $Region 2>$null
+        # Guard so a denied/failed invalidation warns instead of throwing a
+        # terminating NativeCommandError under $ErrorActionPreference='Stop'.
+        $previous = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        try {
+            $null = & aws cloudfront create-invalidation --distribution-id $CloudFrontId --paths '/*' --region $Region 2>$null
+        } finally {
+            $ErrorActionPreference = $previous
+        }
         if ($LASTEXITCODE -ne 0) {
             Get-Warn "CloudFront invalidation failed (is the session authorized for cloudfront:CreateInvalidation?)."
         } else {
