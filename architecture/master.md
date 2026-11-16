@@ -144,7 +144,7 @@ The Windows-native deployment is implemented and the static frontend plus API ar
 
 ## Remaining work
 
-Open work is tracked only in [../planning/handoffs.md](../planning/handoffs.md): the EveryAction CRM contract, CloudFront provisioning, production CORS confirmation, E2E in CI, final end-to-end QA/WCAG sign-off, Android device QA, the Google Play release, and removal of the legacy `apps/mobile` scaffold.
+Open work is tracked only in [../planning/handoffs.md](../planning/handoffs.md): the EveryAction CRM contract, CloudFront provisioning, E2E in CI, final end-to-end QA/WCAG sign-off, Android device QA, the Google Play release, and removal of the legacy `apps/mobile` scaffold.
 
 ## Architecture direction
 
