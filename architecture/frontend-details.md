@@ -66,6 +66,7 @@ This document captures feature-level implementation details moved from [master.m
 - Frontend wiring via env-selected adapters; test env forces mock modes for determinism. Backend and frontend suites plus Playwright E2E upload flow verify behavior.
 
 ## Deployment (AWS, us-east-2, account 590251390266)
-- `scripts/deploy/deploy-aws.ps1` builds/syncs frontend to S3 with cache headers and safety checks.
+- `scripts/deploy/deploy-aws.ps1` builds/syncs frontend to S3 with cache headers and safety checks, and packages/deploys the Lambda artifact.
+- Every `deploy-aws.ps1` run (check/dry-run/deploy) appends one JSONL record to `logs/deployments/deployments.jsonl` plus a matching `logs/deployments/<runId>.log`: timestamp/finishedAt/duration, git short+full SHA and dirty flag, runId, `-Description` (required for real deploys, defaulted for check/dry-run), mode, targets/resolved config, result (`success`/`failed`/`blocked`), error, and the actions taken/planned. `Get-Err` throws (rather than exiting) so a `try/finally` always writes the record; secrets (env-file contents, credentials) are never logged, only paths/flags/presence. `logs/` is gitignored.
 - `scripts/deploy/package-api.ps1` produces Lambda zip (CommonJS handler). `cap-api` Lambda (role `lambda-cap-role-1`, scoped S3 policy) and API Gateway HTTP API are live with intake/upload/CORS behavior verified; uploads land encrypted in the documents bucket.
 - CloudFront/OAC not yet provisioned (account verification required); frontend currently served from S3 website endpoint (HTTP-only). Production CORS configured for the live static origin across API Gateway, Lambda env, and bucket CORS.

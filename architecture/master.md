@@ -19,6 +19,7 @@ Open work is tracked in [../planning/handoffs.md](../planning/handoffs.md). Feat
 ### Backend, storage, and deployment
 - Implemented a transport-neutral backend (Node + Lambda) for intake submission and presigned document uploads: validated/idempotent intake handling with durable audit logging, direct browser-to-storage uploads (S3 or local dev sink), and hardened CORS/security/logging practices.
 - Deployed the static frontend, API Gateway HTTP API, and Lambda in AWS (us-east-2) with verified intake and presigned-upload behavior. Serving is currently HTTP-only via the S3 website endpoint pending CloudFront.
+- Added durable per-run deployment visibility: `scripts/deploy/deploy-aws.ps1` records every run (check/dry-run/deploy) to `logs/deployments/deployments.jsonl` (JSONL) plus a human-readable companion, capturing timestamp/duration, git revision+dirty state, `-Description`, mode, targets/config, result/error, and the actions taken. Details in [frontend-details.md](./frontend-details.md).
 
 ### Mobile foundation
 - Implemented the React Native/Expo mobile app and shared domain package covering the core intake journey, native document selection/capture, and mock/API-configurable submission and upload flows. See [react-native.md](./react-native.md).
