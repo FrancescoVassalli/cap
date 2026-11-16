@@ -58,7 +58,8 @@ export const en: AllContent = {
         },
         {
           title: "Medical Bills",
-          description: "Assistance navigating medical bills and billing issues.",
+          description:
+            "Assistance navigating medical bills and billing issues.",
         },
         {
           title: "Coverage and Access Issues",
@@ -67,8 +68,7 @@ export const en: AllContent = {
         },
         {
           title: "Prescription Costs",
-          description:
-            "Support with prescription medication costs and access.",
+          description: "Support with prescription medication costs and access.",
         },
       ],
     },
@@ -282,6 +282,12 @@ export const en: AllContent = {
       generic: "There is an error with this field.",
       errorSummaryHeading: "There are issues to fix:",
     },
+
+    validationToast: {
+      valid: "Your form is valid. Submitting your request...",
+      invalid: "Please correct the highlighted fields before submitting.",
+      dismiss: "Dismiss notification",
+    },
   },
 
   // ========================================================================
@@ -299,8 +305,7 @@ export const en: AllContent = {
 
     success: {
       heading: "Request Received",
-      message:
-        "Thank you for contacting the Consumer Assistance Program.",
+      message: "Thank you for contacting the Consumer Assistance Program.",
       nextSteps:
         "A member of our team will review your request and contact you by phone or email. " +
         "CAP generally responds within five business days, although it may take longer when we receive a high volume of requests.",

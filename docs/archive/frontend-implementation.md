@@ -1124,48 +1124,6 @@ type SubmissionStatus =
 
 The UI should never silently fail.
 
-## Idle
-
-```text
-Submit Request
-```
-
-## Submitting
-
-```text
-Submitting your request...
-```
-
-Disable repeated submission:
-
-```text
-button disabled
-```
-
-## Success
-
-Show a dedicated success screen.
-
-Example:
-
-```text
-Request received
-
-Thank you for contacting the Consumer Assistance Program.
-
-A member of our team will review your request and contact you by phone or email. CAP generally responds within five business days, although it may take longer when we receive a high volume of requests.
-
-Please keep any relevant medical bills, insurance letters, explanations of benefits, and claim information available in case our team needs additional information.
-
-Your reference number is:
-
-8F4A-7E74
-```
-
-The current CAP process says that staff contact the consumer, may send an authorization form, may request documents securely, and then work with the consumer toward resolution. The new success screen should set that expectation.
-
----
-
 # 28. Submission failure
 
 If submission fails:

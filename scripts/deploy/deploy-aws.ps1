@@ -50,10 +50,11 @@
 
 .PARAMETER ApiBaseUrl
   Public base URL of the live API (API Gateway/Lambda) to bake into the frontend
-  build. When provided (or set via VITE_CAP_API_BASE_URL / CAP_API_BASE_URL), the
-  frontend build sets VITE_CAP_SUBMISSION_MODE=api and VITE_CAP_UPLOAD_MODE=s3 so
-  the deployed bundle calls the live Lambda instead of the in-memory mocks. Vite
-  inlines these at build time.
+  build. Defaults to the deployed `cap-api` API Gateway endpoint; can be
+  overridden via VITE_CAP_API_BASE_URL / CAP_API_BASE_URL. The frontend build
+  sets VITE_CAP_SUBMISSION_MODE=api and VITE_CAP_UPLOAD_MODE=s3 so the deployed
+  bundle calls the live Lambda instead of the in-memory mocks. Vite inlines
+  these at build time.
 
 .PARAMETER FrontendDir
   Frontend build directory (default: dist).
@@ -126,7 +127,10 @@ if ([string]::IsNullOrWhiteSpace($CloudFrontId))    { $CloudFrontId = $env:CAP_C
 if ([string]::IsNullOrWhiteSpace($ApiFunction))     { $ApiFunction = $env:CAP_API_FUNCTION_NAME }
 if ([string]::IsNullOrWhiteSpace($ApiPackage))      { $ApiPackage = $env:CAP_API_PACKAGE_PATH }
 if ([string]::IsNullOrWhiteSpace($LambdaEnvFile))   { $LambdaEnvFile = $env:CAP_LAMBDA_ENV_FILE }
-if ([string]::IsNullOrWhiteSpace($ApiBaseUrl))      { $ApiBaseUrl = if ($env:VITE_CAP_API_BASE_URL) { $env:VITE_CAP_API_BASE_URL } elseif ($env:CAP_API_BASE_URL) { $env:CAP_API_BASE_URL } else { '' } }
+# Default to the live `cap-api` API Gateway endpoint so a normal frontend deploy
+# is wired to the deployed Lambda instead of silently building the mocks.
+$LiveApiBaseUrl = 'https://ah0jz85mlj.execute-api.us-east-2.amazonaws.com'
+if ([string]::IsNullOrWhiteSpace($ApiBaseUrl))      { $ApiBaseUrl = if ($env:VITE_CAP_API_BASE_URL) { $env:VITE_CAP_API_BASE_URL } elseif ($env:CAP_API_BASE_URL) { $env:CAP_API_BASE_URL } else { $LiveApiBaseUrl } }
 if ([string]::IsNullOrWhiteSpace($FrontendDir))     { $FrontendDir = 'dist' }
 
 # Default (like bash): if no deployable chosen, do both.

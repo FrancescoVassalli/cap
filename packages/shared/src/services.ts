@@ -150,7 +150,7 @@ export class ApiSubmissionService implements SubmissionService {
 
   constructor(baseUrl = '', fetchImpl?: typeof fetch) {
     this.baseUrl = baseUrl
-    this.fetchImpl = fetchImpl ?? globalThis.fetch
+    this.fetchImpl = fetchImpl ?? globalThis.fetch.bind(globalThis)
   }
 
   async submit(payload: SubmissionPayload): Promise<IntakeSubmissionResult> {

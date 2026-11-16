@@ -220,6 +220,11 @@ export interface IntakeFormContent {
   documents: DocumentsStepContent;
   navigation: FormNavigationContent;
   errors: FormErrorContent;
+  validationToast: {
+    valid: string;
+    invalid: string;
+    dismiss: string;
+  };
 }
 
 // ============================================================================

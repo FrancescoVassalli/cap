@@ -72,6 +72,26 @@ describe('ApiSubmissionService', () => {
     }
   })
 
+  it('calls the browser fetch function with its global receiver', async () => {
+    let receiver: unknown
+    const fetchMock = vi.fn(function (this: unknown) {
+      receiver = this
+      return Promise.resolve({
+        status: 200,
+        ok: true,
+        json: async () => ({ referenceId: 'CAP-REF' }),
+      })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      const service = new ApiSubmissionService('https://cap.example')
+      await service.submit(makePayload())
+      expect(receiver).toBe(globalThis)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('surfaces server field errors on a 4xx response', async () => {
     const fetchMock = vi
       .fn()

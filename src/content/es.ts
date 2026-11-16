@@ -33,7 +33,8 @@ export const es: AllContent = {
     footer: {
       ariaLabel: "Pie de página de CAP",
       navLabel: "Navegación de pie de página",
-      copyright: "© Iniciativa de Salud del Consumidor de Colorado. Todos los derechos reservados.",
+      copyright:
+        "© Iniciativa de Salud del Consumidor de Colorado. Todos los derechos reservados.",
     },
   },
 
@@ -59,7 +60,8 @@ export const es: AllContent = {
         },
         {
           title: "Facturas Médicas",
-          description: "Asistencia para navegar facturas médicas y problemas de facturación.",
+          description:
+            "Asistencia para navegar facturas médicas y problemas de facturación.",
         },
         {
           title: "Problemas de Cobertura y Acceso",
@@ -133,7 +135,8 @@ export const es: AllContent = {
   // ========================================================================
 
   intakeLanding: {
-    heading: "¿Necesita Ayuda con una Factura de Atención Médica o un Problema de Seguros?",
+    heading:
+      "¿Necesita Ayuda con una Factura de Atención Médica o un Problema de Seguros?",
     subheading:
       "CAP proporciona asistencia gratuita a los consumidores de Colorado.",
 
@@ -282,10 +285,17 @@ export const es: AllContent = {
       invalidFileType: "Este tipo de archivo no está permitido.",
       fileTooLarge:
         "Este archivo es demasiado grande. El tamaño máximo es 10 MB.",
-      totalSizeTooLarge: "El tamaño total del archivo excede el límite de 50 MB.",
+      totalSizeTooLarge:
+        "El tamaño total del archivo excede el límite de 50 MB.",
       duplicateFile: "Ya ha seleccionado este archivo.",
       generic: "Hay un error con este campo.",
       errorSummaryHeading: "Hay problemas que corregir:",
+    },
+
+    validationToast: {
+      valid: "Su formulario es válido. Enviando su solicitud...",
+      invalid: "Corrija los campos resaltados antes de enviar.",
+      dismiss: "Cerrar notificación",
     },
   },
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   createServices,
+  DEFAULT_PRODUCTION_API_BASE_URL,
   resolveServiceSelectionFromEnv,
   type EnvLike,
 } from './index'
@@ -10,6 +11,41 @@ import { LocalDocumentUploadService, PresignedS3DocumentUploadService } from './
 describe('resolveServiceSelectionFromEnv', () => {
   it('defaults to the static-prototype mocks when no env vars are set', () => {
     expect(resolveServiceSelectionFromEnv({})).toEqual({})
+  })
+
+  it('defaults production builds to the live API and S3 upload flow', () => {
+    const selection = resolveServiceSelectionFromEnv({
+      MODE: 'production',
+      PROD: true,
+    } as EnvLike)
+    expect(selection.production).toEqual({
+      submission: 'api',
+      documentUpload: 's3',
+      baseUrl: DEFAULT_PRODUCTION_API_BASE_URL,
+    })
+  })
+
+  it('uses a configured API base URL in production builds', () => {
+    const selection = resolveServiceSelectionFromEnv({
+      MODE: 'production',
+      PROD: true,
+      VITE_CAP_API_BASE_URL: 'https://override.example/',
+    } as EnvLike)
+    expect(selection.production).toMatchObject({
+      submission: 'api',
+      documentUpload: 's3',
+      baseUrl: 'https://override.example',
+    })
+  })
+
+  it('allows production builds to opt back into the prototype adapters', () => {
+    const selection = resolveServiceSelectionFromEnv({
+      MODE: 'production',
+      PROD: true,
+      VITE_CAP_SUBMISSION_MODE: 'mock',
+      VITE_CAP_UPLOAD_MODE: 'local',
+    } as EnvLike)
+    expect(selection).toEqual({})
   })
 
   it('selects the api submission adapter from the submission mode env var', () => {

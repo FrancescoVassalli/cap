@@ -5,10 +5,7 @@ import { Container } from '@/components/layout'
 import { IntakeProgress } from '@/components/navigation'
 import { getContent } from '@/content'
 import { INTAKE_STEP_COUNT, useIntakeNavigation } from '@/hooks/useIntakeNavigation'
-import {
-  useEveryActionSubmission,
-  type EveryActionSubmissionValues,
-} from '@/hooks/useEveryActionSubmission'
+import { useEveryActionSubmission, type EveryActionSubmissionValues } from '@/hooks/useEveryActionSubmission'
 import { useZipLookup } from '@/hooks/useZipLookup'
 import type { IntakeDocument, IntakeFormValues } from '@/types/index'
 import { createIntakeSchema } from '@/validation/intakeSchema'
@@ -19,14 +16,13 @@ import { ErrorSummary, type ErrorSummaryEntry } from './ErrorSummary'
 import { LanguageStep } from './LanguageStep'
 import { SubmissionError } from './SubmissionError'
 import { SubmissionSuccess } from './SubmissionSuccess'
+import { ValidationToast } from './ValidationToast'
 import { ZipStep } from './ZipStep'
 
 const TOTAL_STEPS = INTAKE_STEP_COUNT
 
 function getFieldStep(field: string): number | undefined {
-  const entry = Object.entries(INTAKE_STEP_FIELDS).find(([, fields]) =>
-    fields.some((stepField) => stepField === field),
-  )
+  const entry = Object.entries(INTAKE_STEP_FIELDS).find(([, fields]) => fields.some((stepField) => stepField === field))
   return entry ? Number(entry[0]) : undefined
 }
 
@@ -63,9 +59,11 @@ export function IntakeForm({ intakeId }: IntakeFormProps) {
   const [triedToContinue, setTriedToContinue] = useState(false)
   const [isUploadingDocuments, setIsUploadingDocuments] = useState(false)
   const [isRetrying, setIsRetrying] = useState(false)
-  const [serverFieldErrors, setServerFieldErrors] = useState<
-    Partial<Record<keyof IntakeFormValues, string>>
-  >({})
+  const [validationToast, setValidationToast] = useState<{
+    type: 'valid' | 'invalid'
+    message: string
+  } | null>(null)
+  const [serverFieldErrors, setServerFieldErrors] = useState<Partial<Record<keyof IntakeFormValues, string>>>({})
   const stepHeadingRef = useRef<HTMLHeadingElement>(null)
   const languageRef = useRef<'en' | 'es'>('en')
   const errorSummaryFocusedRef = useRef(false)
@@ -114,12 +112,7 @@ export function IntakeForm({ intakeId }: IntakeFormProps) {
 
   if (submissionStatus === 'error' || isRetrying) {
     return (
-      <SubmissionError
-        language={submittedLanguage}
-        kind={errorKind}
-        onRetry={handleRetry}
-        isLoading={isRetrying}
-      />
+      <SubmissionError language={submittedLanguage} kind={errorKind} onRetry={handleRetry} isLoading={isRetrying} />
     )
   }
 
@@ -129,15 +122,7 @@ export function IntakeForm({ intakeId }: IntakeFormProps) {
       validationSchema={() => createIntakeSchema(getContent(languageRef.current))}
       onSubmit={handleSubmission}
     >
-      {({
-        values,
-        touched,
-        handleChange,
-        handleBlur,
-        setFieldValue,
-        setTouched,
-        validateForm,
-      }) => {
+      {({ values, touched, handleChange, handleBlur, setFieldValue, setTouched, validateForm }) => {
         languageRef.current = values.language
         const content = getContent(values.language)
 
@@ -228,7 +213,10 @@ export function IntakeForm({ intakeId }: IntakeFormProps) {
           if (location) {
             setFieldValue('city', location.city)
             setFieldValue('state', location.state)
-            autofilledAddressRef.current = { city: location.city, state: location.state }
+            autofilledAddressRef.current = {
+              city: location.city,
+              state: location.state,
+            }
             setZipNotice('')
             return
           }
@@ -270,6 +258,10 @@ export function IntakeForm({ intakeId }: IntakeFormProps) {
 
         const handleNext = async () => {
           if (Object.keys(stepErrors).length > 0) {
+            setValidationToast({
+              type: 'invalid',
+              message: content.intakeForm.validationToast.invalid,
+            })
             const touchedFields: Record<string, boolean> = {}
             Object.keys(stepErrors).forEach((field) => {
               touchedFields[field] = true
@@ -291,6 +283,10 @@ export function IntakeForm({ intakeId }: IntakeFormProps) {
 
           const fullErrors = await validateForm()
           if (Object.keys(fullErrors).length > 0) {
+            setValidationToast({
+              type: 'invalid',
+              message: content.intakeForm.validationToast.invalid,
+            })
             const nextServerFieldErrors: Partial<Record<keyof IntakeFormValues, string>> = {}
             const touchedFields: Record<string, boolean> = {}
             ;(Object.keys(fullErrors) as Array<keyof IntakeFormValues>).forEach((field) => {
@@ -311,6 +307,10 @@ export function IntakeForm({ intakeId }: IntakeFormProps) {
             return
           }
 
+          setValidationToast({
+            type: 'valid',
+            message: content.intakeForm.validationToast.valid,
+          })
           const result = await handleSubmission(values)
           if (!result) return
 
@@ -346,122 +346,132 @@ export function IntakeForm({ intakeId }: IntakeFormProps) {
         }
 
         return (
-          <Container size="md" className="py-8 sm:py-10">
-            <div className="mb-6 overflow-hidden rounded-2xl border border-cap-secondary/40 bg-white shadow-sm">
-              <div className="border-b border-cap-secondary/40 bg-cap-secondary-50 px-4 py-3 sm:px-5">
-                <IntakeProgress
-                  current={stepMeta.stepNumber}
-                  total={totalSteps}
-                  progressText={content.intakeForm.navigation.progressLabel(stepMeta.stepNumber, totalSteps)}
-                  ariaLabel={content.intakeForm.navigation.progressAriaLabel}
-                />
+          <>
+            {validationToast && (
+              <ValidationToast
+                type={validationToast.type}
+                message={validationToast.message}
+                dismissLabel={content.intakeForm.validationToast.dismiss}
+                onDismiss={() => setValidationToast(null)}
+              />
+            )}
+            <Container size="md" className="py-8 sm:py-10">
+              <div className="mb-6 overflow-hidden rounded-2xl border border-cap-secondary/40 bg-white shadow-sm">
+                <div className="border-b border-cap-secondary/40 bg-cap-secondary-50 px-4 py-3 sm:px-5">
+                  <IntakeProgress
+                    current={stepMeta.stepNumber}
+                    total={totalSteps}
+                    progressText={content.intakeForm.navigation.progressLabel(stepMeta.stepNumber, totalSteps)}
+                    ariaLabel={content.intakeForm.navigation.progressAriaLabel}
+                  />
+                </div>
+                <div className="px-4 pb-4 sm:px-5">
+                  <h1
+                    ref={stepHeadingRef}
+                    tabIndex={-1}
+                    className="mt-3 text-2xl font-bold text-cap-primary focus:outline-none focus:ring-2 focus:ring-cap-primary focus:ring-offset-2"
+                  >
+                    {stepMeta.label}
+                  </h1>
+                </div>
               </div>
-              <div className="px-4 pb-4 sm:px-5">
-                <h1
-                  ref={stepHeadingRef}
-                  tabIndex={-1}
-                  className="mt-3 text-2xl font-bold text-cap-primary focus:outline-none focus:ring-2 focus:ring-cap-primary focus:ring-offset-2"
-                >
-                  {stepMeta.label}
-                </h1>
-              </div>
-            </div>
 
-            <Form
-              noValidate
-              className="space-y-6 rounded-2xl border border-cap-secondary/40 bg-white p-5 shadow-sm sm:p-8"
-              onSubmit={(event) => {
-                event.preventDefault()
-                void handleNext()
-              }}
-            >
-              {showErrorSummary && (
-                <ErrorSummary
-                  heading={content.intakeForm.errors.errorSummaryHeading}
-                  entries={errorEntries}
-                  autoFocus={!errorSummaryFocusedRef.current}
-                  onAutoFocused={() => {
-                    errorSummaryFocusedRef.current = true
-                  }}
-                />
-              )}
+              <Form
+                noValidate
+                className="space-y-6 rounded-2xl border border-cap-secondary/40 bg-white p-5 shadow-sm sm:p-8"
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  void handleNext()
+                }}
+              >
+                {showErrorSummary && (
+                  <ErrorSummary
+                    heading={content.intakeForm.errors.errorSummaryHeading}
+                    entries={errorEntries}
+                    autoFocus={!errorSummaryFocusedRef.current}
+                    onAutoFocused={() => {
+                      errorSummaryFocusedRef.current = true
+                    }}
+                  />
+                )}
 
-              {currentStep === 0 && (
-                <ZipStep
-                  content={content}
-                  values={values}
-                  errors={stepErrors}
-                  touched={touched}
-                  zipNotice={zipNotice}
-                  onZipChange={handleZipChange}
-                  onBlur={handleBlur}
-                />
-              )}
+                {currentStep === 0 && (
+                  <ZipStep
+                    content={content}
+                    values={values}
+                    errors={stepErrors}
+                    touched={touched}
+                    zipNotice={zipNotice}
+                    onZipChange={handleZipChange}
+                    onBlur={handleBlur}
+                  />
+                )}
 
-              {currentStep === 1 && (
-                <LanguageStep
-                  content={content}
-                  value={values.language}
-                  errors={stepErrors}
-                  touched={touched}
-                  onChange={handleLanguageChange}
-                  onBlur={handleBlur}
-                />
-              )}
+                {currentStep === 1 && (
+                  <LanguageStep
+                    content={content}
+                    value={values.language}
+                    errors={stepErrors}
+                    touched={touched}
+                    onChange={handleLanguageChange}
+                    onBlur={handleBlur}
+                  />
+                )}
 
-              {currentStep === 2 && (
-                <ContactStep
-                  content={content}
-                  values={values}
-                  errors={stepErrors}
-                  touched={touched}
-                  onChange={handleFieldChange}
-                  onBlur={handleBlur}
-                />
-              )}
+                {currentStep === 2 && (
+                  <ContactStep
+                    content={content}
+                    values={values}
+                    errors={stepErrors}
+                    touched={touched}
+                    onChange={handleFieldChange}
+                    onBlur={handleBlur}
+                  />
+                )}
 
-              {currentStep === 3 && (
-                <DocumentsStep
-                  content={content}
-                  intakeId={intakeId}
-                  documents={values.documents}
-                  onAddDocuments={handleAddDocuments}
-                  onRemoveDocument={handleRemoveDocument}
-                  onClearDocuments={handleClearDocuments}
-                  onUploadingChange={setIsUploadingDocuments}
-                />
-              )}
+                {currentStep === 3 && (
+                  <DocumentsStep
+                    content={content}
+                    intakeId={intakeId}
+                    documents={values.documents}
+                    onAddDocuments={handleAddDocuments}
+                    onRemoveDocument={handleRemoveDocument}
+                    onClearDocuments={handleClearDocuments}
+                    onUploadingChange={setIsUploadingDocuments}
+                  />
+                )}
 
-              <div className="flex flex-col-reverse gap-3 pt-6 sm:flex-row sm:justify-between">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="lg"
-                  onClick={handleBack}
-                  disabled={!canGoBack || submissionStatus === 'loading'}
-                >
-                  {content.intakeForm.navigation.back}
-                </Button>
-
-                {currentStep < totalSteps - 1 ? (
-                  <Button type="button" size="lg" onClick={handleNext}>
-                    {content.intakeForm.navigation.continue}
-                  </Button>
-                ) : (
+                <div className="flex flex-col-reverse gap-3 pt-6 sm:flex-row sm:justify-between">
                   <Button
                     type="button"
+                    variant="outline"
                     size="lg"
-                    onClick={handleNext}
-                    disabled={submissionStatus === 'loading' || isUploadingDocuments}
+                    onClick={handleBack}
+                    disabled={!canGoBack || submissionStatus === 'loading'}
                   >
-                    {submissionStatus === 'loading'
-                      ? content.submission.submitting.label
-                      : content.intakeForm.navigation.submit}
+                    {content.intakeForm.navigation.back}
                   </Button>
-                )}
-              </div>
-            </Form>
-          </Container>
+
+                  {currentStep < totalSteps - 1 ? (
+                    <Button type="button" size="lg" onClick={handleNext}>
+                      {content.intakeForm.navigation.continue}
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      size="lg"
+                      onClick={handleNext}
+                      disabled={submissionStatus === 'loading' || isUploadingDocuments}
+                    >
+                      {submissionStatus === 'loading'
+                        ? content.submission.submitting.label
+                        : content.intakeForm.navigation.submit}
+                    </Button>
+                  )}
+                </div>
+              </Form>
+            </Container>
+          </>
         )
       }}
     </Formik>

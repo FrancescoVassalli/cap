@@ -6,9 +6,10 @@
  * contracts and makes the eventual swap to a real backend a configuration
  * change rather than a rewrite of the intake UI.
  *
- * Selection is driven by an explicit mode (defaulting to the static prototype)
- * so tests and future environments can compose different adapters without
- * touching the form layer.
+ * Selection is driven by the build mode and explicit `VITE_CAP_*` overrides:
+ * development/test defaults to the static prototype, while production defaults
+ * to the live API adapters. Tests and future environments can compose different
+ * adapters without touching the form layer.
  */
 import { createSubmissionService, type SubmissionService } from './submissionService'
 import { zipService, type ZipService } from './zipService'
@@ -38,15 +39,26 @@ export type Services = {
 export type EnvLike = Record<string, unknown>
 
 /**
+ * Live API Gateway endpoint for the deployed `cap-api` Lambda. Production
+ * builds default to this endpoint so a deploy cannot silently fall back to the
+ * in-memory mock; `VITE_CAP_API_BASE_URL` still overrides it for other
+ * environments.
+ */
+export const DEFAULT_PRODUCTION_API_BASE_URL =
+  'https://ah0jz85mlj.execute-api.us-east-2.amazonaws.com'
+
+/**
  * Resolves the runtime adapter selection from Vite environment variables.
- * The static prototype remains the default; `VITE_CAP_SUBMISSION_MODE` =
- * `api`, `VITE_CAP_UPLOAD_MODE` = `s3`, and `VITE_CAP_API_BASE_URL` select the
- * real backend without changing the form layer or the adapter contracts.
+ * Development/test builds keep the static prototype (mock submission, local
+ * document upload). Production builds call the live API and S3 upload flow by
+ * default; `VITE_CAP_API_BASE_URL` can override the endpoint and explicit
+ * `VITE_CAP_*` modes can still opt a build back into the prototype adapters.
  */
 export function resolveServiceSelectionFromEnv(env: EnvLike = {}): ServiceSelection {
   const submissionMode = env['VITE_CAP_SUBMISSION_MODE']
   const uploadMode = env['VITE_CAP_UPLOAD_MODE']
-  const baseUrl = env['VITE_CAP_API_BASE_URL']
+  const configuredBaseUrl = env['VITE_CAP_API_BASE_URL']
+  const isProductionBuild = env['MODE'] === 'production' || env['PROD'] === true
 
   const production: ServiceSelection['production'] = {}
   let hasProduction = false
@@ -54,13 +66,25 @@ export function resolveServiceSelectionFromEnv(env: EnvLike = {}): ServiceSelect
   if (submissionMode === 'api' || submissionMode === 'email') {
     production.submission = submissionMode
     hasProduction = true
+  } else if (isProductionBuild && submissionMode !== 'mock') {
+    production.submission = 'api'
+    hasProduction = true
   }
+
   if (uploadMode === 's3') {
     production.documentUpload = 's3'
     hasProduction = true
+  } else if (isProductionBuild && uploadMode !== 'local') {
+    production.documentUpload = 's3'
+    hasProduction = true
   }
-  if (typeof baseUrl === 'string' && baseUrl.length > 0) {
-    production.baseUrl = baseUrl
+
+  if (hasProduction) {
+    const baseUrl =
+      typeof configuredBaseUrl === 'string' && configuredBaseUrl.trim().length > 0
+        ? configuredBaseUrl.trim()
+        : DEFAULT_PRODUCTION_API_BASE_URL
+    production.baseUrl = baseUrl.replace(/\/+$/, '')
   }
 
   return hasProduction ? { production } : {}
@@ -86,10 +110,10 @@ function buildServices(selection: ServiceSelection = {}): Services {
 }
 
 /**
- * Default service composition for the running app. Mode selection is driven by
- * `VITE_CAP_*` environment variables and falls back to the static prototype
- * (mock submission, local UI-only document upload) when no backend is
- * configured. Tests can build alternate compositions with `buildServices`.
+ * Default service composition for the running app. Development/test builds use
+ * the static prototype (mock submission, local UI-only document upload);
+ * production builds use the live API/S3 adapters unless `VITE_CAP_*` overrides
+ * opt out. Tests can build alternate compositions with `buildServices`.
  */
 export const services: Services = buildServices(
   resolveServiceSelectionFromEnv(import.meta.env satisfies EnvLike),
