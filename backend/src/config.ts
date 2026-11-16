@@ -37,6 +37,11 @@ export const DEFAULT_ALLOWED_ORIGINS = [
   'http://127.0.0.1:5173',
   'https://127.0.0.1:5173',
   'https://cohealthinitiative.org',
+  'https://www.cohealthinitiative.org',
+  // Static S3 website host the frontend is deployed to while CloudFront
+  // provisioning is blocked. CloudFront/OAC and an HTTPS custom domain remain
+  // the production target.
+  'http://cap-frontend-590251390266-us-east-2-an.s3-website.us-east-2.amazonaws.com',
 ]
 
 function splitOrigins(value: string | undefined, fallback: string[]): string[] {

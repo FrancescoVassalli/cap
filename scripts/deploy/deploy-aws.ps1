@@ -46,7 +46,14 @@
   Optional JSON file with the `{"Variables":{...}}` shape to apply as the Lambda
   environment on create and on every code/config update (default
   CAP_LAMBDA_ENV_FILE). Keep this file gitignored — it carries runtime secrets
-  such as the S3 credentials used by the S3 presigner.
+  such as the   S3 credentials used by the S3 presigner.
+
+.PARAMETER ApiBaseUrl
+  Public base URL of the live API (API Gateway/Lambda) to bake into the frontend
+  build. When provided (or set via VITE_CAP_API_BASE_URL / CAP_API_BASE_URL), the
+  frontend build sets VITE_CAP_SUBMISSION_MODE=api and VITE_CAP_UPLOAD_MODE=s3 so
+  the deployed bundle calls the live Lambda instead of the in-memory mocks. Vite
+  inlines these at build time.
 
 .PARAMETER FrontendDir
   Frontend build directory (default: dist).
@@ -54,7 +61,7 @@
 .EXAMPLE
   powershell -ExecutionPolicy Bypass -File scripts/deploy/deploy-aws.ps1 -Check
   powershell -ExecutionPolicy Bypass -File scripts/deploy/deploy-aws.ps1 -Frontend -DryRun
-  powershell -ExecutionPolicy Bypass -File scripts/deploy/deploy-aws.ps1 -Frontend -Api
+  powershell -ExecutionPolicy Bypass -File scripts/deploy/deploy-aws.ps1 -Frontend -Api -ApiBaseUrl "https://example.execute-api.us-east-2.amazonaws.com"
 #>
 [CmdletBinding()]
 param(
@@ -68,6 +75,7 @@ param(
     [string]$ApiFunction = '',
     [string]$ApiPackage = '',
     [string]$LambdaEnvFile = '',
+    [string]$ApiBaseUrl = '',
     [string]$FrontendDir = ''
 )
 
@@ -91,6 +99,7 @@ if ([string]::IsNullOrWhiteSpace($CloudFrontId))    { $CloudFrontId = $env:CAP_C
 if ([string]::IsNullOrWhiteSpace($ApiFunction))     { $ApiFunction = $env:CAP_API_FUNCTION_NAME }
 if ([string]::IsNullOrWhiteSpace($ApiPackage))      { $ApiPackage = $env:CAP_API_PACKAGE_PATH }
 if ([string]::IsNullOrWhiteSpace($LambdaEnvFile))   { $LambdaEnvFile = $env:CAP_LAMBDA_ENV_FILE }
+if ([string]::IsNullOrWhiteSpace($ApiBaseUrl))      { $ApiBaseUrl = if ($env:VITE_CAP_API_BASE_URL) { $env:VITE_CAP_API_BASE_URL } elseif ($env:CAP_API_BASE_URL) { $env:CAP_API_BASE_URL } else { '' } }
 if ([string]::IsNullOrWhiteSpace($FrontendDir))     { $FrontendDir = 'dist' }
 
 # Default (like bash): if no deployable chosen, do both.
@@ -349,9 +358,16 @@ if ($Frontend) {
         Get-Err "The AWS session cannot access the frontend bucket '$FrontendBucket'. Cannot deploy the frontend."
     }
 
+    $liveFrontend = -not [string]::IsNullOrWhiteSpace($ApiBaseUrl)
+
     if ($DryRun) {
         Get-Step 'Dry run: frontend package'
-        Write-Host "npm run build"
+        if ($liveFrontend) {
+            Write-Host "VITE_CAP_SUBMISSION_MODE=api VITE_CAP_UPLOAD_MODE=s3 VITE_CAP_API_BASE_URL=<set> npm run build"
+        } else {
+            Get-Warn 'No API base URL configured (set -ApiBaseUrl or VITE_CAP_API_BASE_URL / CAP_API_BASE_URL). The frontend will be built with the static-prototype mocks and will NOT call the live Lambda.'
+            Write-Host "npm run build"
+        }
         Write-Host "aws s3 sync $ResolvedFrontendDir s3://$FrontendBucket --delete --exclude *.map --cache-control public,max-age=31536000,immutable"
         Write-Host "aws s3 cp $ResolvedFrontendDir\index.html s3://$FrontendBucket/index.html --cache-control no-cache"
         if (-not [string]::IsNullOrWhiteSpace($CloudFrontId)) {
@@ -360,9 +376,28 @@ if ($Frontend) {
         exit 0
     }
 
+    if (-not $liveFrontend) {
+        Get-Warn 'No API base URL configured (set -ApiBaseUrl or VITE_CAP_API_BASE_URL / CAP_API_BASE_URL). Building with static-prototype mocks; the deployed frontend will NOT call the live Lambda.'
+    }
+
     Get-Step 'Building frontend'
     Push-Location $RepoRoot
-    try { & npm run build } finally { Pop-Location }
+    $prevSubmit = $env:VITE_CAP_SUBMISSION_MODE
+    $prevUpload = $env:VITE_CAP_UPLOAD_MODE
+    $prevApi = $env:VITE_CAP_API_BASE_URL
+    try {
+        if ($liveFrontend) {
+            $env:VITE_CAP_SUBMISSION_MODE = 'api'
+            $env:VITE_CAP_UPLOAD_MODE = 's3'
+            $env:VITE_CAP_API_BASE_URL = $ApiBaseUrl
+        }
+        & npm run build
+    } finally {
+        $env:VITE_CAP_SUBMISSION_MODE = $prevSubmit
+        $env:VITE_CAP_UPLOAD_MODE = $prevUpload
+        $env:VITE_CAP_API_BASE_URL = $prevApi
+        Pop-Location
+    }
     if ($LASTEXITCODE -ne 0) { Get-Err "Frontend build failed (exit $LASTEXITCODE)." }
 
     if (-not (Test-Path (Join-Path $ResolvedFrontendDir 'index.html'))) {

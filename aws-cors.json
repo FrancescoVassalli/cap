@@ -6,7 +6,9 @@
         "https://localhost:5173",
         "http://127.0.0.1:5173",
         "https://127.0.0.1:5173",
-        "https://cohealthinitiative.org"
+        "https://cohealthinitiative.org",
+        "https://www.cohealthinitiative.org",
+        "http://cap-frontend-590251390266-us-east-2-an.s3-website.us-east-2.amazonaws.com"
       ],
       "AllowedMethods": [
         "GET",

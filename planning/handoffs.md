@@ -5,7 +5,6 @@ This file lists only open work. Completed work and verified status live in [arch
 ## API and backend
 
 1. **EveryAction (CRM) contract** — confirm the final endpoint, field mapping, and production credentials, then point the live `ApiSubmissionService` at the real EveryAction submission flow. The API Gateway/Lambda deployment, idempotency, intake audit log, presigned uploads, CORS, and CloudWatch logging are otherwise live.
-2. **Confirm production CORS** — set `CAP_ALLOWED_ORIGINS` to the exact static-host origin before release.
 
 ## QA and accessibility
 
