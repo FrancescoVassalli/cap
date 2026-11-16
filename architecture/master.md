@@ -2,214 +2,51 @@
 
 ## Current status
 
-The CAP project has moved past the initial scaffold phase and is now in the downstream implementation stage. The informational pages and the localized EN/ES intake form flow are implemented (with accessible validation and submission states), the app shell and navigation are polished, the service layer is finalized behind real adapters and dedicated hooks, and the visual / branding pass has repainted the app onto the CAP/CCHI palette. In addition, the real backend API and secure presigned file-storage flow are now implemented and verified working end-to-end — selecting a document issues a presigned URL and the file PUT lands in the S3 bucket, with a local/mock sink available for development and CI. The remaining work is CloudFront provisioning, the EveryAction CRM contract, final QA/accessibility sign-off, and the mobile store release.
+CAP is in late-stage implementation: the web intake experience, backend API, and live AWS deployment are in place, with remaining work focused on production hardening and release readiness. The public web flow (informational pages and bilingual EN/ES intake with validation and submission states), branded mobile-first UI, adapter-based service layer, and a verified presigned document-upload flow are implemented. The static frontend, API Gateway, and Lambda are deployed live; CloudFront/OAC and the EveryAction CRM integration remain open, alongside final QA/accessibility sign-off and the mobile store release.
 
-Open work is tracked only in [../planning/handoffs.md](../planning/handoffs.md). The original implementation-drift audit is retained in [../docs/archive/implementation-audit.md](../docs/archive/implementation-audit.md); its primary discrepancy — a service layer backed only by in-place mocks — is resolved: the service contracts are now backed by real adapters and consumed through dedicated hooks and a service registry.
+Open work is tracked in [../planning/handoffs.md](../planning/handoffs.md). Feature-level implementation detail moved from this summary lives in [frontend-details.md](./frontend-details.md); mobile details remain in [react-native.md](./react-native.md). Historical context is retained in [../docs/archive/implementation-audit.md](../docs/archive/implementation-audit.md).
 
-## Completed work
+## Completed work (quarterly view)
 
-### Foundation and app shell
-- Vite + React + TypeScript project scaffold
-- Route shell for the public-facing app, including the landing and intake entry points
-- Shared domain types and validation contracts
-- Basic service boundaries for ZIP lookup, document handling, and submission
-- Test, lint, typecheck, and build scripts configured for the frontend
+### Web experience and intake
+- Delivered the public site shell and informational pages, plus a localized multi-step intake (ZIP, language, contact, documents, submission) with live EN/ES switching, accessible validation/error handling, and clear submission states.
+- Established a mobile-first, WCAG-aware UI on CAP/CCHI branding (reusable form/layout primitives, branded shell/navigation, intake progress, focus and route-orientation behavior).
 
-### Design system
-- Reusable Tailwind-based form controls and layout primitives
-- Mobile-first responsive patterns intended for phone-based completion
-- Accessible patterns for inputs, errors, hints, and form feedback
-- Shared layout-building blocks such as containers, card surfaces, and app shell framing
+### Content, services, and data flow
+- Centralized bilingual copy in typed content modules consumed at render time (no large inline copy blocks).
+- Implemented real, swappable service adapters behind registries/hooks for ZIP lookup, submission, and document upload, including EveryAction request mapping and idempotency-aware submission behavior. Intake data is not persisted in browser storage.
 
-### CSS / Tailwind foundation
-- Bootstrapped Tailwind by adding `@import url(...)` + `@import "tailwindcss";` as the first lines of `src/index.css`. Previously the Tailwind engine was never invoked — the single global stylesheet had no Tailwind directive, so the compiled production CSS was only ~1 KB of hand-written rules with **no** generated utilities, Preflight reset, or theme output (the app shipped unstyled; tests passed because Vitest asserts behavior, not styles).
-- Migrated the design tokens from the deprecated JS `tailwind.config.ts` to Tailwind v4's CSS-first `@theme` block in `src/index.css` (and removed the now-redundant JS config). Every token becomes a real utility and stays in sync with the brand/semantic plan: `--color-cap-{primary,secondary,highlight}`, `--color-status-{error,success,focus}`, the semantic layer (`--color-{text,muted,border,background,surface}`), `--font-sans` (Inter), `--spacing-safe`, and `--min-height/width-touch` (44px).
-- Loaded the Inter typeface (Google Fonts) and remapped `--font-sans` so the intended font actually renders instead of silently falling back to system-ui.
-- Fixed Tailwind v4-incompatible or invalid utilities across the components:
-  - Replaced the removed v3 `bg-opacity-*` / `file:bg-opacity-*` opacity utilities with the v4 color-mix syntax (`hover:bg-cap-primary/90`, `active:bg-cap-primary/90`, `hover:file:bg-cap-primary/90`) in `Button`, `FormFooter`, and `FileInput`.
-  - Removed the invalid `font-base` class from all six input/select/textarea primitives (`TextInput`, `EmailInput`, `PhoneInput`, `ZipInput`, `Select`, `Textarea`).
-  - Corrected `resize-vertical` → `resize-y` in `Textarea`.
-- Removed the dead Vite scaffold `src/App.css` (leftover styles referencing nonexistent variables; never imported).
-- Verification: `npm run build` now emits a ~30 KB production CSS bundle (up from ~1 KB) containing generated utilities (`bg-cap-primary`, `min-h-touch`, `focus-visible:ring-cap-primary`, `resize-y`), the Inter `--font-sans` variable, and the color-mix `/90` opacity output. `npm run test` (10 files / 58 tests), `npm run lint`, `npm run typecheck`, and `npm run build` all pass.
+### Backend, storage, and deployment
+- Implemented a transport-neutral backend (Node + Lambda) for intake submission and presigned document uploads: validated/idempotent intake handling with durable audit logging, direct browser-to-storage uploads (S3 or local dev sink), and hardened CORS/security/logging practices.
+- Deployed the static frontend, API Gateway HTTP API, and Lambda in AWS (us-east-2) with verified intake and presigned-upload behavior. Serving is currently HTTP-only via the S3 website endpoint pending CloudFront.
 
-### Content and localization layer
-- Typed English and Spanish content modules (src/content/types.ts, en.ts, es.ts, index.ts)
-- Centralized copy for navigation, informational pages, intake form steps, submission states, and legal notices
-- Clear separation between the content model and components; the content layer is now actually consumed by the app rather than sitting unused:
-  - The app shell renders brand, nav labels, nav aria-label, and footer copy from the navigation content module
-  - Informational pages render from their owned route files with component-scoped `getContent()` calls, and NotFound renders entirely from a `notFound` content block
-  - The intake form derives content from `getContent(values.language)` inside the Formik render prop, so selecting Español on the language step switches the whole remaining flow to Spanish live
-  - No large copy blocks remain inline in components; new copy must be added to the content modules with bilingual (EN/ES) key parity
-
-### Informational pages
-- /how-we-help page with the service overview, process steps, expectations, and trust-building content
-- /intake landing page with orientation, what-you-need guidance, and an explicit privacy / information notice
-- Both pages live in dedicated owned route files (src/routes/HowWeHelpPage.tsx and src/routes/IntakeLandingPage.tsx) and render entirely from the typed content modules; section copy and CTA labels come from the content layer rather than inline strings
-- The Start CTA on /intake is content-driven and generates /intake/:id via crypto.randomUUID(), so visitors only enter the form once they are oriented and know what to expect
-- Accessible, mobile-first structure: no nested <main> landmarks, no nested interactive controls, semantic heading hierarchy, keyboard-accessible actions, and visible focus states
-- Route-level regression tests (src/routes/HowWeHelpPage.test.tsx and src/routes/IntakeLandingPage.test.tsx) cover the eligibility/orientation content and the CTA flow into the intake route
-- Known placeholder: the secondary CTA on /how-we-help (content.howWeHelp.secondaryCta) still links to url: "#" and needs a real Consumer Resources URL from CAP review
-
-### Localized intake form flow
-- Multi-step Formik flow implemented on /intake/:id covering ZIP, language, contact, documents, and submission
-- Live EN/ES switching: the form renders from `getContent(values.language)` inside the Formik render prop, so choosing Español on the language step immediately switches labels, hints, placeholders, validation messages, ZIP notices, document copy, buttons, and the error screen to Spanish; the success screen preserves the selected language through a `submittedLanguage` snapshot
-- Validation messages come from the content layer via the step validator (`validateIntakeStep`) and a content-driven Yup schema (no inline error strings)
-- Componentized step content under src/components/intake/ (ZipStep, LanguageStep, ContactStep, DocumentsStep, IntakeForm, SubmissionSuccess, SubmissionError, ErrorSummary), with navigation encapsulated in src/hooks/useIntakeNavigation.ts (currentStep/goNext/goBack/canGoBack)
-- Step validation is authoritative for the current step: stale whole-form Formik errors no longer block progression, and field errors refresh as the user edits
-- Accessible error summary: on a failed Continue attempt the error summary is shown (content-driven heading) and keyboard focus moves to it, but not re-stolen on every keystroke/remount; invalid fields carry aria-invalid and errors are associated via FormField (WCAG 2.2 AA)
-- ZIP step supports optional lookup with frontend autofill of city/state (still editable) and an unknown-ZIP notice, all via the zip service contract; there is no dedicated "Skip this step" control — leaving the ZIP blank and continuing is the supported skip path (the Continue flow clears ZIP/city/state via the button handler)
-- Document validation enforces per-file 10 MB, total 50 MB, allowed types (PDF/JPG/JPEG/PNG), and duplicate-file detection with content-driven messages, and shows selected files with per-file Remove
-- Submission flow has idle/loading/success/error states with duplicate-click prevention (submit disabled while loading) and renders the reference number on the content-driven success screen; failure renders content-driven error/retry states
-- No-persistence requirement preserved: no PHI or consumer data written to browser storage, URL parameters, analytics, or client logs (verified by test)
-- Focused regression suite in src/components/intake/IntakeForm.test.tsx covers step navigation (Back/Continue), progress label, ZIP autofill/blank-continue/unknown, required-field and email validation, content-driven success screen with reference number, and no-persistence
-- The old `IntakeStartButton` export was removed from IntakePage.tsx; the "Start a New Request" CTA now lives in IntakeLandingPage.tsx
-- Known: the `npm run typecheck` script (tsc --noEmit on the solution tsconfig) passes trivially; the production `npm run build` (tsc -b) is the stricter check and is green
-
-### Intake bug-fix pass (B1–B19)
-- **Form flow and validation:** the intake `<Form>` submit handler now routes implicit Enter submissions through the same step-validation gate as Continue. ZIP autofill tracks the currently derived city/state and clears stale derived values when a known ZIP becomes unknown, partial, or blank, while leaving manual edits intact. Final-step validation failures now jump to the first invalid step with a visible error summary. Server `fieldErrors` are preserved by `useEveryActionSubmission`, mapped back to application fields, and surfaced on the relevant step; they are kept in local server-error state rather than merged with stale Formik errors, and clear as fields are edited. “Try Again” resubmits the preserved payload.
-- **Submission states:** `SubmissionError` now distinguishes generic, network, and session-expired failures and renders the matching bilingual content and action. Success/error headings receive focus, success has `role="status"`, error has `role="alert"`, and navigation actions are buttons instead of nested `<Link><Button /></Link>` controls.
-- **Documents:** duplicate accepted-file mapping now uses object identity. Overlapping file selections use functional Formik updates, track in-flight uploads with a counter, and disable Submit while uploading. The former “Skip this step” action is now “Clear selected files”/“Borrar archivos seleccionados”, clears document errors, and only appears when documents are attached. Remove buttons include the document name in their accessible label.
-- **Accessibility and routing:** `FormField` generates hint/error ids and adds `aria-describedby` to the child control. The language radio group has an accessible legend and SVG flags. Selecting Spanish updates/restores `document.documentElement.lang`. The unknown-ZIP notice is a status region. The landing CTA uses shared `generateIntakeId()`, and `/intake/:id` rejects malformed ids via `isValidIntakeId` in `src/routes/intakeId.ts`, redirecting to `/intake`.
-- **Regression coverage:** added `FormField`, `SubmissionError`, `DocumentsStep`, `documentValidation`, `IntakePage`, and submission-error integration tests, plus expanded `IntakeForm` and `useEveryActionSubmission` coverage. The test setup provides in-memory Web Storage only when jsdom lacks it, keeping the no-persistence assertions runnable. Verification: `npm test` (23 files / 175 tests), `npm run typecheck`, and `npm run build` pass; `npm run lint` reports only two pre-existing unused-directive warnings in generated `dist`/`dist-lambda` files.
-
-### App shell and navigation polish
-- Refined `AppShell` into a calm, mobile-first shell: a skip-to-content link, a sticky brand header with active-route `NavLink`s (which publish `aria-current="page"`), a bare `<main id="main-content">` landmark, and a content-driven footer that includes the legal disclaimer and copyright.
-- Wired in the real CCHI branding assets: the header `SiteBrand` and `FooterNav` now render the approved `CCHI_Logo.png` from `public/` instead of a text-only wordmark, and the favicon/title in `index.html` were switched from the Vite placeholder `favicon.svg` to the approved `CCHI-logo-favicon.png` (with the page title updated to "Consumer Assistance Program"). The header logo link keeps its full program name as an accessible name (`aria-label`) with the decorative image (`alt=""`), and the footer logo carries the full program-name alt text. The old Vite placeholder `favicon.svg`/`icons.svg` are no longer referenced by the shell.
-- Introduced dedicated navigation components under `src/components/navigation/`: `SkipLink`, `SiteBrand`, `MainNav`, `FooterNav`, `IntakeProgress`, and `RouteFocus`.
-- The multi-step intake flow now shows a visible segmented progress bar with an accessible “Step X of Y” label, so the visitor always knows where they are in the form.
-- Route pages were normalized onto the shared `Container` primitive (a new `xl` width was added) so /how-we-help, /intake, /intake/:id, and the not-found page share consistent horizontal rhythm and vertical spacing.
-- Route transitions reset scroll and move focus to the page heading on pathname change, keeping screen-reader users oriented without interfering with the intake step focus management.
-- Accessibility preserved/improved: visible focus rings, 44px touch targets in the header, semantic landmarks, no color-only progress indication, and mobile-first reflow (the two-item main nav remains visible without a hidden menu).
-- New regression tests cover the shell (skip link, brand home link, active-route nav, footer disclaimer/copyright) and the intake progress component.
-
-### Visual / branding pass (Design System Agent)
-- Added light brand-tint tokens to `src/index.css` (`--color-cap-primary-50`, `--color-cap-primary-100`, `--color-cap-secondary-50`), derived from the brand hexes, and warmed the semantic canvas (`--color-background`); existing `status-*`, `touch`, and `font` tokens were left unchanged.
-- Repainted `AppShell` onto the warm brand canvas (`bg-cap-primary-50`), added a thin primary→secondary→highlight gradient brand bar across the top, and switched header/footer chrome to `border-cap-secondary/40` accents. The footer is now a brand-toned secondary band that swaps the gray chrome for the blue brand color while keeping dark text for contrast.
-- Built a primary→secondary blue-gradient hero on both `/how-we-help` and `/intake` with white text, a highlight (`#fec524`) eyebrow pill, and a highlight CTA (never white-on-yellow). `/how-we-help` gained a real CAP hero image (`public/cchi-help-2.jpg`).
-- Replaced the flat gray card stacking with branded surfaces: warm header rows (`bg-cap-secondary-50` + `border-cap-secondary/40`), service tiles with a `border-l-4 border-cap-primary` accent, "How CAP Works" step tiles with highlight number chips, and a highlight/expectations color-band callout block.
-- Added a `highlight` variant to `Button.tsx` (`bg-cap-highlight text-cap-primary` with a subtle hover lift) used for the get-help/start CTAs, and normalized form-control borders to a secondary accent (`border-cap-secondary/70`, focus to primary) across the input/select/textarea primitives and `Card`.
-- Branded the main nav active state (`bg-cap-primary` + white text) and inactive hover underline, and themed the intake form progress + step-card surfaces (completed segments cap-primary, current segment cap-secondary, `IntakeProgress` labels retained so color is never the only signal).
-- Added a team/trust section on `/how-we-help` with the real CAP team headshots pulled into `public/` (`team-{stephanie,madi,melissa,monica,alejandra}.*`) as decorative-but-alt-labeled figures, plus a real hero photo. No new backend or business logic; all changes are presentational.
-- Made `RadioGroup`/`LanguageStep` explicitly controlled so the selected language radio is actually checked (a pre-existing correctness improvement folded into this pass); the language step defaults to English with a regression test.
-- Verification: `npm run test` (10 files / 60 tests), `npm run lint`, `npm run build`, and `npm run typecheck` are green; the production CSS grew to ~36 KB and contains the new brand-tint utilities and gradient/highlight styles. A Playwright visual smoke check confirmed the warm canvas, hero gradient + white text, highlight CTA (yellow bg / primary text), secondary footer, and no horizontal overflow at 390px mobile width on both informational pages.
-- Contrast guardrails held: dark text on highlight, white on primary, and dark text on the secondary footer all meet target contrast; focus-visible rings and 44px touch targets were preserved on every repainted surface.
-
-### Service layer
-- Replaced the in-place mock ZIP adapter with `StaticZipService`, a dataset-driven adapter backed by a real Colorado ZIP dataset (`src/data/zipCodes.json`). It returns the postal locality for known codes and `null` for unknown, blank, or malformed codes, so the intake can show the “We couldn't find that ZIP code” notice and continue without blocking.
-- Defined and implemented multiple submission adapters behind `SubmissionService`: `MockSubmissionService` (in-memory prototype), `EmailSubmissionService` (dev/demo notification that deliberately avoids placing PHI or documents in a `mailto:` URL), and `ApiSubmissionService` (production shape with an `Idempotency-Key`, network/session/server-field error discrimination, and no raw exceptions surfaced).
-- Defined and implemented multiple document-upload adapters behind `DocumentUploadService`: `LocalDocumentUploadService` (prototype, UI-only) and `PresignedS3DocumentUploadService` (production presigned-URL flow that safe-throws when a backend is not configured so the UI never implies secure storage).
-- Introduced a service registry / dependency-injection boundary (`src/services/index.ts`) so the form layer never instantiates concrete service classes directly; adapter selection is a configuration concern.
-- Introduced the hook-based business-logic layer called for by the plan: `useZipLookup`, `useIntakeSubmission`, and `useDocumentUpload`, and wired them into `IntakeForm` and `DocumentsStep`.
-- Submission error states are discriminated (`error` vs. `networkError` vs. `sessionExpired`) so the UI maps each to the correct content copy without exposing exceptions; retry resets submission state via the hook.
-- Unit tests (`src/services/zipService.test.ts`, `submissionService.test.ts`, `documentUploadService.test.ts`) cover data access, unknown/blank/malformed ZIPs, error discrimination, idempotency header, presigned-URL flow, and storage-key safety (never using the original filename as a security boundary).
-
-### EveryAction data transformation
-- Added a pure mapper module (`src/services/everyActionMapper.ts`) that owns every EveryAction field name, numeric id, and request-metadata constant so the URL-encoding/field-name concerns live in one testable place rather than leaking into the UI or the generic API adapter.
-  - `toEveryActionBody(payload, meta, config?)` maps the application `SubmissionPayload` to the flat EveryAction field map (`FirstName`, `LastName`, `PreferredLanguages`, `EmailAddress`, `AddressLine1`, `City`, `PostalCode`, and the split `HomePhoneCountryCode` / `HomePhoneInternationalDialingPrefix` / `HomePhone`), plus request metadata (`FormSessionId`, `ClientSubmissionId`, `BrowserName`, `DeviceType`, `XFromApp`, `ActionTagBaseUrl`, `FormVersion`, `type`).
-  - `buildUrlEncoded(body)` produces the `application/x-www-form-urlencoded; charset=UTF-8` body, percent-encoding special characters via `URLSearchParams`.
-  - A `DEFAULT_EVERY_ACTION_CONFIG` seam (mirroring the `services` DI boundary) holds the numeric language ids (`en` -> `62`, `es` -> `15` per the approved mapping) and defaults for `type`, `XFromApp`, `ActionTagBaseUrl`, and `FormVersion`, swappable without code changes.
-  - `detectBrowserName` / `detectDeviceType` (pure, UA-string based) and `buildEveryActionMeta` (derives non-sensitive session/client submission ids client-side, with hardcoded fallbacks for non-browser environments).
-  - Optional data is handled correctly: a skipped ZIP omits `PostalCode`, an omitted phone omits the `HomePhone*` group, and documents are never transmitted as bytes (they are uploaded separately via `useDocumentUpload`).
-- `ApiSubmissionService` now consumes the mapper: it builds the EveryAction body and POSTs it URL-encoded (instead of raw JSON) while keeping the `Idempotency-Key` header, network/session/server-field error discrimination, and no-raw-exception guarantees. The mock and email adapters are untouched.
-- Added a thin `useEveryActionSubmission` hook (mirroring `useIntakeSubmission`) that composes the mapper/payload assembly with the existing `SubmissionService` boundary, so `IntakeForm` calls a single clean `submit(values)` and never sees EveryAction specifics. It preserves the idle/loading/success/error lifecycle and duplicate-click prevention.
-- Unit tests (`src/services/everyActionMapper.test.ts`, `src/hooks/useEveryActionSubmission.test.ts`) and new `ApiSubmissionService` assertions cover every mapped field, optional ZIP/phone skip, language-id mapping through the config seam, URL-encoding of special characters, session/client/browser/device metadata, the hook happy path + failures + duplicate guard, and the URL-encoded request body.
-
-### Backend API and secure file storage (API implementation agent)
-The production backend behind the service boundaries is now implemented and the presigned file-upload flow is verified working end-to-end — including a real upload that lands in the S3 bucket. The frontend service contracts remain the boundary; the UI never knows whether it is talking to S3, the local sink, or a mock.
-- Built a small transport-neutral backend under `backend/` sharing one route dispatcher (`src/api.ts`) between the local Node server (`src/server.ts`) and a Lambda adapter (`src/lambda.ts`). Routes: `GET /health`, `POST /intakes` (idempotent by `Idempotency-Key`), `POST /intakes/:id/upload-url`, and `PUT /uploads/:id` (the local-mode sink only).
-- Intake submission (`src/handlers/createIntake.ts`) validates required fields, uses the client `crypto.randomUUID()` intake id as the idempotency key (rejects forged/non-UUID ids as `session_expired`), stores metadata, and returns a canonical `{ referenceId }` with structured validation errors.
-- On every first-time submission the received **form input is written to a durable intake audit log** (`store.appendIntakeLog` / `getIntakeLog`, an append-only per-intake `logs` collection in the store — not the PHI-free stdout logger). This records exactly what was submitted for later inspection without leaking consumer data into operation logs; idempotent replays return early and never duplicate the entry.
-- Secure document upload: the backend validates file name, MIME, per-file ≤ 10 MB and cumulative ≤ 50 MB limits (`src/validation/upload.ts`), sanitizes the file name, issues a **presigned upload URL** for `S3_BUCKET_NAME` (`src/presigner/s3Presigner.ts`), persists document metadata, and lets the browser PUT the file bytes directly to storage — never through the app's own API. Verified: a real `PUT -InFile` to a generated S3 presigned URL returns 200 and the file is visible in the bucket.
-- Two interchangeable presigner implementations behind one contract (`src/presigner/presigner.ts`):
-  - **S3** (`s3Presigner.ts`) — real AWS Signature V4 URLs when the bucket, region, and credentials are present.
-  - **Local** (`localPresigner.ts`) — a signed (`signed`) or unsigned (`mock`) localhost `…/uploads/:id` sink so development/CI exercise the exact two-step presigned flow without AWS. In local mode the file bytes are read for the empty-body check and then discarded (never stored or logged).
-- Backend runtime mode is driven by env: `CAP_LOCAL_PRESIGNER_MODE` (`mock` forces the local sink; any other value + S3 credentials selects S3), `CAP_PUBLIC_BASE_URL`, `CAP_REQUIRE_HTTPS`, `CAP_UPLOAD_URL_EXPIRY_SECONDS`, and `CAP_ALLOWED_ORIGINS`. The local presigner is selected whenever S3 is not fully configured so local/CI keep working. Presigner selection happens once at startup and is logged (`presigner-s3-active` / `presigner-local-active`), so a silent localhost upload is never hidden.
-- Shared CORS handling (`backend/src/cors.ts`) wired into the dispatcher answers preflights and emits scoped `Access-Control-Allow-*` headers for both the Node server and Lambda adapter; origin whitelist is configurable (`CAP_ALLOWED_ORIGINS`, defaults to localhost dev origins plus `https://cohealthinitiative.org`).
-- Security and privacy hardening: HTTPS-required toggle, no sensitive intake data in query strings (the signed upload token is opaque), bodies size-capped, rate limiting on public write endpoints, HMAC-signed upload tokens verified with `timingSafeEqual`, and structured logging that records only safe identifiers/error categories — no PHI, raw payloads, or document content.
-- Frontend wiring is purely configuration: `.env.local` sets `VITE_CAP_SUBMISSION_MODE=api` + `VITE_CAP_UPLOAD_MODE=s3` + `VITE_CAP_API_BASE_URL=http://localhost:8787`, which selects `ApiSubmissionService` (routes the "Submit Request" button to `POST /intakes`) and `PresignedS3DocumentUploadService` through `src/services/index.ts`. The upload adapter is mode-agnostic about the returned URL, so it works whether the backend returns an S3 URL or the localhost sink — making the S3↔mock switch a single backend env flag with no UI change. The frontend test project forces both `VITE_CAP_*` modes to empty in `vite.config.ts` (`test.env`) so the suite stays deterministic against the in-memory mocks even when a developer's `.env.local` points the dev server at the live API.
-- Automated tests cover CORS, validation, idempotency, submission logging, contracts, the Node server, and the Lambda adapter, plus the frontend suites; run `npm test` and `npm run test:backend` for current counts. A Playwright E2E (`tests/documentUpload.spec.ts`) drives the intake to the documents step, selects a file, and asserts both the `POST /intakes/:id/upload-url` request and the PUT to the presigned URL.
-
-### Deployment (Windows-native AWS)
-
-The Windows-native deployment is implemented and the static frontend plus API are live in account `590251390266`, `us-east-2`:
-
-- `scripts/deploy/deploy-aws.ps1` builds/syncs the frontend to `cap-frontend-590251390266-us-east-2-an` with correct cache headers (`assets/*` immutable, `index.html` no-cache), and includes a per-layer IAM preflight plus a guard against deleting into the documents bucket.
-- `scripts/deploy/package-api.ps1` compiles the backend to CommonJS and zips `dist-lambda/cap-api.zip` with handler `handler.handler`. The nodejs20.x Lambda runtime cannot load an ESM `.js` handler (`ERR_REQUIRE_ESM`) or a `.mjs` handler (`Runtime.HandlerNotFound`); both were verified live.
-- `backend/src/handler.ts` wires `createApiDependencies(process.env)` into `createLambdaHandler`. `backend/src/lambda.ts` handles both API Gateway payload formats (v1 and v2).
-- The `cap-api` Lambda uses role `lambda-cap-role-1`, which has `AWSLambdaBasicExecutionRole` (`logs:*`) plus a scoped `s3:PutObject`/`s3:GetObject` policy on the documents bucket. Its `/aws/lambda/cap-api` log group shows structured `intake-accepted`, `intake-replayed`, and `upload-url-issued` events.
-- The API Gateway HTTP API is live at `https://ah0jz85mlj.execute-api.us-east-2.amazonaws.com`: `GET /health` → 200, `POST /intakes` → 201 with `CAP-XXXX-XXXX` (idempotent replay → 200 with the same id), `POST /intakes/:id/upload-url` → 200 with a real S3 presigned URL, and CORS preflight → 204.
-- A byte `PUT` to the presigned URL returns 200 with an ETag; the object lands in `cap1-casedocs-590251390266-us-east-2-an` under `intakes/{intakeId}/documents/{documentId}` with metadata and AES256 server-side encryption.
-- CloudFront is **not provisioned**: `cloudfront:CreateDistribution` is blocked pending AWS account verification. The OAC `cap-frontend-oac` must be recreated once the account is verified. Until then the frontend is served directly from the S3 website endpoint, which is HTTP-only; provisioning CloudFront/OAC (and an HTTPS custom domain) remains required before release.
-- **Production CORS is configured for the live static host.** The intake POST and upload-url calls failed with the app's network-error screen ("Your Connection Was Interrupted") because the S3 website origin (`http://cap-frontend-590251390266-us-east-2-an.s3-website.us-east-2.amazonaws.com`) was absent from every CORS layer, so the browser's preflight to the API was rejected. The origin is now included in three places, all verified live: the API Gateway HTTP API CORS `AllowOrigins` (preflight), the `cap-api` Lambda `CAP_ALLOWED_ORIGINS` env var (actual response `Access-Control-Allow-Origin`), and the documents bucket CORS rules (direct presigned `PUT` uploads). `backend/src/config.ts` defaults, `aws-cors.json`, and `cors.json` were updated to match. Verified: preflight from the S3 origin returns `204` with the correct allow headers, and `POST /intakes` returns `201` with `Access-Control-Allow-Origin` set to the S3 origin.
+### Mobile foundation
+- Implemented the React Native/Expo mobile app and shared domain package covering the core intake journey, native document selection/capture, and mock/API-configurable submission and upload flows. See [react-native.md](./react-native.md).
 
 ## Remaining work
 
-Open work is tracked only in [../planning/handoffs.md](../planning/handoffs.md): the EveryAction CRM contract, CloudFront provisioning, E2E in CI, final end-to-end QA/WCAG sign-off, Android device QA, the Google Play release, and removal of the legacy `apps/mobile` scaffold.
+Open items are tracked only in [../planning/handoffs.md](../planning/handoffs.md). At a high level:
+- **Integrations & infrastructure:** finalize the EveryAction CRM contract/production wiring and provision CloudFront/OAC for HTTPS delivery.
+- **Quality & release:** complete end-to-end QA and WCAG 2.2 AA sign-off (web and on-device Android), add E2E coverage to CI, and execute the Google Play release (including removal of the legacy mobile scaffold).
 
 ## Architecture direction
 
-The application is intentionally designed as a static, mobile-first frontend prototype that can later be connected to a CRM or backend workflow. The architecture stays simple and explicit:
+- **Client:** React + TypeScript (Vite) web app and Expo/React Native mobile app, styled mobile-first with accessible patterns and centralized bilingual content.
+- **Contracts:** Formik/Yup-driven intake with service abstractions and a shared domain boundary so UI remains decoupled from backend/CRM specifics.
+- **Backend:** Small serverless-ready API providing idempotent intake handling and presigned document uploads; storage is direct-to-bucket with a local/mock sink for development and CI.
+- **Privacy:** No browser persistence of intake/PHI; sensitive data excluded from URLs and client logs.
 
-- React + TypeScript for a predictable frontend
-- Vite for a lightweight build/dev workflow
-- Tailwind for styling and responsive design
-- Formik + Yup for intake validation flow
-- Centralized content modules for bilingual copy, consumed by components at render time
-- Service abstractions for ZIP lookup, submission, and document upload so the static prototype can be replaced by a backend without rewriting the intake UI
-- No browser persistence for intake data to keep sensitive information out of local storage
-- A small serverless-ready backend behind those service boundaries (Node server for local dev, Lambda adapter for deployment) exposing intake submission and presigned document uploads, with a local/mock sink for development and CI and an S3 presigner for production — the frontend stays transport-agnostic
+## Key references
 
-## Key implementation files
-
-- [../src/App.tsx](../src/App.tsx)
-- [../src/routes/AppRouter.tsx](../src/routes/AppRouter.tsx) (installs `RouteFocus` and the route table)
-- [../src/routes/NotFoundPage.tsx](../src/routes/NotFoundPage.tsx)
-- [../src/routes/HowWeHelpPage.tsx](../src/routes/HowWeHelpPage.tsx)
-- [../src/routes/IntakeLandingPage.tsx](../src/routes/IntakeLandingPage.tsx)
-- [../src/routes/IntakePage.tsx](../src/routes/IntakePage.tsx)
-- [../src/components/layout/AppShell.tsx](../src/components/layout/AppShell.tsx)
-- [../src/components/navigation/](../src/components/navigation/) (SkipLink, SiteBrand, MainNav, FooterNav, IntakeProgress, RouteFocus)
-- [../src/components/intake/IntakeForm.tsx](../src/components/intake/IntakeForm.tsx) (with ZipStep, LanguageStep, ContactStep, DocumentsStep, SubmissionSuccess, SubmissionError, ErrorSummary, and IntakeForm.test.tsx)
-- [../src/hooks/useIntakeNavigation.ts](../src/hooks/useIntakeNavigation.ts)
-- [../src/validation/intakeSchema.ts](../src/validation/intakeSchema.ts)
-- [../src/validation/intakeStepValidation.ts](../src/validation/intakeStepValidation.ts)
-- [../src/validation/documentValidation.ts](../src/validation/documentValidation.ts)
-- [../src/routes/HowWeHelpPage.test.tsx](../src/routes/HowWeHelpPage.test.tsx)
-- [../src/routes/IntakeLandingPage.test.tsx](../src/routes/IntakeLandingPage.test.tsx)
-- [../src/types/index.ts](../src/types/index.ts)
-- [../src/data/zipCodes.json](../src/data/zipCodes.json)
-- [../src/services/index.ts](../src/services/index.ts)
-- [../src/services/zipService.ts](../src/services/zipService.ts)
-- [../src/services/submissionService.ts](../src/services/submissionService.ts)
-- [../src/services/documentUploadService.ts](../src/services/documentUploadService.ts)
-- [../src/services/zipService.test.ts](../src/services/zipService.test.ts)
-- [../src/services/submissionService.test.ts](../src/services/submissionService.test.ts)
-- [../src/services/documentUploadService.test.ts](../src/services/documentUploadService.test.ts)
-- [../src/hooks/useZipLookup.ts](../src/hooks/useZipLookup.ts)
-- [../src/hooks/useIntakeSubmission.ts](../src/hooks/useIntakeSubmission.ts)
-- [../src/hooks/useDocumentUpload.ts](../src/hooks/useDocumentUpload.ts)
-- [../src/hooks/useEveryActionSubmission.ts](../src/hooks/useEveryActionSubmission.ts)
-- [../src/hooks/useEveryActionSubmission.test.ts](../src/hooks/useEveryActionSubmission.test.ts)
-- [../src/services/everyActionMapper.ts](../src/services/everyActionMapper.ts)
-- [../src/services/everyActionMapper.test.ts](../src/services/everyActionMapper.test.ts)
-- [../src/content/index.ts](../src/content/index.ts)
-- [../src/content/types.ts](../src/content/types.ts)
-- [../src/content/en.ts](../src/content/en.ts)
-- [../src/content/es.ts](../src/content/es.ts)
-- [../backend/src/api.ts](../backend/src/api.ts) (transport-neutral route dispatcher shared by Node + Lambda)
-- [../backend/src/server.ts](../backend/src/server.ts) (local Node HTTP server)
-- [../backend/src/lambda.ts](../backend/src/lambda.ts) (Lambda adapter)
-- [../backend/src/config.ts](../backend/src/config.ts) (runtime env config)
-- [../backend/src/cors.ts](../backend/src/cors.ts) (shared CORS handling)
-- [../backend/src/handlers/createIntake.ts](../backend/src/handlers/createIntake.ts)
-- [../backend/src/handlers/createUploadUrl.ts](../backend/src/handlers/createUploadUrl.ts)
-- [../backend/src/handlers/receiveUpload.ts](../backend/src/handlers/receiveUpload.ts)
-- [../backend/src/presigner/presigner.ts](../backend/src/presigner/presigner.ts)
-- [../backend/src/presigner/s3Presigner.ts](../backend/src/presigner/s3Presigner.ts)
-- [../backend/src/presigner/localPresigner.ts](../backend/src/presigner/localPresigner.ts)
-- [../backend/src/validation/upload.ts](../backend/src/validation/upload.ts)
-- [../backend/src/repository/](../backend/src/repository/) (in-memory store, swappable for durable storage)
+- [frontend-details.md](./frontend-details.md) — web/frontend and backend implementation details
+- [react-native.md](./react-native.md) — mobile architecture and status
+- [../planning/handoffs.md](../planning/handoffs.md) — open work
+- [../docs/archive/implementation-audit.md](../docs/archive/implementation-audit.md) — historical audit
+- Web routes: [../src/routes/AppRouter.tsx](../src/routes/AppRouter.tsx), [../src/routes/IntakePage.tsx](../src/routes/IntakePage.tsx)
+- Intake UI: [../src/components/intake/IntakeForm.tsx](../src/components/intake/IntakeForm.tsx), [../src/components/layout/AppShell.tsx](../src/components/layout/AppShell.tsx)
+- Service/contracts: [../src/services/index.ts](../src/services/index.ts), [../src/services/everyActionMapper.ts](../src/services/everyActionMapper.ts), [../src/content/index.ts](../src/content/index.ts)
+- Backend: [../backend/src/api.ts](../backend/src/api.ts), [../backend/src/handlers/createIntake.ts](../backend/src/handlers/createIntake.ts), [../backend/src/handlers/createUploadUrl.ts](../backend/src/handlers/createUploadUrl.ts)
 
 ## Bottom line
 
-The project is functionally past the foundation milestone and has a stable UI shell, reusable design system, content architecture that is fully consumed by the app, informational pages, a localized bilingual multi-step intake flow with accessible validation and submission states, a completed navigation polish pass (header/footer, route consistency, intake progress, and route-level orientation), a finalized service layer (real ZIP/submission/upload adapters behind a service registry and dedicated hooks), and a working backend API with a verified secure presigned S3 upload flow (plus a local/mock sink for development and CI). The static frontend, API Gateway, and Lambda are deployed live. The remaining value is CloudFront provisioning, the EveryAction CRM contract, final QA/accessibility sign-off, and the Google Play mobile release.
+The product is functionally complete through core intake, backend processing, and live cloud deployment. The primary value remaining is production-readiness: CRM integration, secure HTTPS distribution, final quality/accessibility assurance, and mobile release.
